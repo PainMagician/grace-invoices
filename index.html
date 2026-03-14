@@ -575,6 +575,7 @@ const { jsPDF } = window.jspdf;
 // ─── Storage helpers ──────────────────────────────────────────────────────────
 const STORAGE_KEY = 'grace_invoices_v1';
 const SETTINGS_KEY = 'grace_invoices_settings_v1';
+const BUSINESSES_KEY = 'grace_invoices_businesses_v1';
 
 function loadInvoices() {
   try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]'); }
@@ -591,40 +592,86 @@ function loadSettings() {
       bankAccountName: 'Grace Crossland-Scott',
       bankBSB: '484-799',
       bankAccountNumber: '051 713 949',
-      regularClasses: [
-        { day: 'Thu', time: '6:15pm', className: 'Yoga - Forest Lake', duration: '60', price: '70' },
-      ],
     };
     return stored ? { ...defaults, ...stored } : defaults;
   } catch {
-    return {
-      invoiceNumberOverride: '',
-      bankAccountName: 'Grace Crossland-Scott',
-      bankBSB: '484-799',
-      bankAccountNumber: '051 713 949',
-      regularClasses: [
-        { day: 'Thu', time: '6:15pm', className: 'Yoga - Forest Lake', duration: '60', price: '70' },
-      ],
-    };
+    return { invoiceNumberOverride: '', bankAccountName: 'Grace Crossland-Scott', bankBSB: '484-799', bankAccountNumber: '051 713 949' };
   }
 }
 function saveSettings(s) {
   localStorage.setItem(SETTINGS_KEY, JSON.stringify(s));
 }
 
-// ─── Invoice number helpers ───────────────────────────────────────────────────
-function getNextInvoiceNumber(invoices) {
-  const settings = loadSettings();
-  // If an override is set, use it and clear it
-  if (settings.invoiceNumberOverride && settings.invoiceNumberOverride.trim()) {
-    return settings.invoiceNumberOverride.trim().toUpperCase();
+// ─── Business helpers ─────────────────────────────────────────────────────────
+function generateBusinessId() { return Date.now().toString(36) + Math.random().toString(36).slice(2,6); }
+
+function prefixFromName(name) {
+  if (!name) return 'INV';
+  const words = name.trim().split(/\s+/);
+  return words.map(w => w[0]?.toUpperCase() || '').join('').slice(0, 6) || 'INV';
+}
+
+function defaultBusiness() {
+  // Migrate from old regularClasses if present
+  const oldSettings = JSON.parse(localStorage.getItem(SETTINGS_KEY) || 'null');
+  const oldClasses = oldSettings?.regularClasses || [{ time: '6:15pm', className: 'Yoga - Forest Lake', duration: '60', price: '70' }];
+  return {
+    id: generateBusinessId(),
+    name: 'Snap Fitness',
+    email: 'brisbanegfm@tbhgroup.com.au',
+    contactName: '',
+    contactPhone: '',
+    invoicePrefix: 'SF',
+    nextNumber: 108,
+    regularClasses: oldClasses,
+    isDefault: true,
+  };
+}
+
+function loadBusinesses() {
+  try {
+    const stored = JSON.parse(localStorage.getItem(BUSINESSES_KEY) || 'null');
+    if (stored && stored.length) return stored;
+    // First run — create default Snap Fitness business
+    const biz = [defaultBusiness()];
+    localStorage.setItem(BUSINESSES_KEY, JSON.stringify(biz));
+    return biz;
+  } catch {
+    return [defaultBusiness()];
   }
-  if (!invoices.length) return 'SF108';
-  const nums = invoices.map(i => {
-    const n = parseInt(i.invoiceNumber.replace(/[^0-9]/g, ''));
-    return isNaN(n) ? 0 : n;
-  });
-  return 'SF' + (Math.max(...nums) + 1);
+}
+function saveBusinesses(list) {
+  localStorage.setItem(BUSINESSES_KEY, JSON.stringify(list));
+}
+function getDefaultBusiness() {
+  const businesses = loadBusinesses();
+  return businesses.find(b => b.isDefault) || businesses[0];
+}
+function getNextInvoiceNumberForBusiness(business, allInvoices) {
+  const settings = loadSettings();
+  // Check for per-business override stored as override_<id>
+  const overrideKey = `invoiceOverride_${business.id}`;
+  if (settings[overrideKey]) {
+    const val = settings[overrideKey];
+    const updated = { ...settings };
+    delete updated[overrideKey];
+    saveSettings(updated);
+    return val.trim().toUpperCase();
+  }
+  // Use per-business counter
+  const prefix = business.invoicePrefix || prefixFromName(business.name);
+  const startNum = business.nextNumber || 108;
+  // Find highest existing number for this business
+  const bizInvoices = allInvoices.filter(inv => inv.businessId === business.id);
+  if (!bizInvoices.length) return `${prefix}${startNum}`;
+  const nums = bizInvoices.map(i => parseInt(i.invoiceNumber.replace(/[^0-9]/g, '')) || 0);
+  return `${prefix}${Math.max(...nums) + 1}`;
+}
+
+// ─── Invoice number helpers (legacy shim) ────────────────────────────────────
+function getNextInvoiceNumber(invoices) {
+  const biz = getDefaultBusiness();
+  return getNextInvoiceNumberForBusiness(biz, invoices);
 }
 
 // ─── Date helpers ─────────────────────────────────────────────────────────────
@@ -697,14 +744,14 @@ function generatePDF(invoice) {
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(12);
   doc.text('Grace Crossland-Scott', col1, y);
-  doc.text('Snap Fitness', col2, y);
+  doc.text(invoice.businessName || 'Snap Fitness', col2, y);
   y += 6;
 
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(10);
   doc.setTextColor(68, 64, 60);
   doc.text('ABN 59 726 072 982', col1, y);
-  doc.text('brisbanegfm@tbhgroup.com.au', col2, y);
+  doc.text(invoice.businessEmail || 'brisbanegfm@tbhgroup.com.au', col2, y);
   y += 5;
   doc.text('gr8shapegrace@gmail.com', col1, y);
   y += 5;
@@ -734,16 +781,16 @@ function generatePDF(invoice) {
   const tableW = W - margin * 2;
   const tblMargin = { left: margin + 1, right: margin + 1 };
   const colStyles = {
-    0: { cellWidth: 14 },
-    1: { cellWidth: 19 },
-    2: { cellWidth: 20 },
-    3: { cellWidth: 'auto' },
-    4: { cellWidth: 24 },
-    5: { cellWidth: 24 },
-    6: { cellWidth: 24 },
+    0: { cellWidth: 11 },    // Day
+    1: { cellWidth: 15 },    // Time
+    2: { cellWidth: 20, overflow: 'visible' }, // Date — must not wrap
+    3: { cellWidth: 'auto' },// Class
+    4: { cellWidth: 22 },    // Duration (mins)
+    5: { cellWidth: 22 },    // Attendance
+    6: { cellWidth: 22 },    // Unit Price
   };
-  const cellPadH = { top: 7, bottom: 7, left: 3, right: 2 };
-  const cellPadB = { top: 8, bottom: 8, left: 3, right: 2 };
+  const cellPadH = { top: 4, bottom: 4, left: 2, right: 2 };
+  const cellPadB = { top: 5, bottom: 5, left: 2, right: 2 };
 
   // Dry run (invisible) to measure exact finalY and header row height
   let measuredHdrH = 0;
@@ -956,27 +1003,153 @@ function Calendar({ value, onChange, onClose }) {
 }
 
 // ─── Invoice Form ─────────────────────────────────────────────────────────────
-function defaultRows() {
-  const settings = loadSettings();
-  const first = settings.regularClasses?.[0] || {};
+function defaultRowsForBusiness(business) {
+  const classes = business?.regularClasses || [];
+  const first = classes[0] || {};
   return [{
     time: first.time || '6:15pm',
     classDate: '',
-    className: first.className || 'Yoga - Forest Lake',
+    className: first.className || '',
     duration: first.duration || '60',
     attendance: '',
     unitPrice: first.price || '70',
   }];
 }
 
+// ─── Add/Edit Business Modal ──────────────────────────────────────────────────
+function BusinessModal({ existing, onSave, onClose }) {
+  const isEdit = !!existing;
+  const [biz, setBiz] = useState(existing || {
+    id: generateBusinessId(),
+    name: '',
+    email: '',
+    contactName: '',
+    contactPhone: '',
+    invoicePrefix: '',
+    nextNumber: 108,
+    regularClasses: [{ time: '6:15pm', className: '', duration: '60', price: '70' }],
+    isDefault: false,
+  });
+
+  // Auto-generate prefix from name
+  function handleNameChange(val) {
+    const auto = prefixFromName(val);
+    setBiz(b => ({ ...b, name: val, invoicePrefix: b.invoicePrefix === prefixFromName(b.name) || !b.invoicePrefix ? auto : b.invoicePrefix }));
+  }
+
+  function updateClass(i, field, val) {
+    setBiz(b => ({ ...b, regularClasses: b.regularClasses.map((c, idx) => idx === i ? { ...c, [field]: val } : c) }));
+  }
+  function addClass() {
+    setBiz(b => ({ ...b, regularClasses: [...b.regularClasses, { time: '6:15pm', className: '', duration: '60', price: '70' }] }));
+  }
+  function removeClass(i) {
+    if (biz.regularClasses.length <= 1) return;
+    setBiz(b => ({ ...b, regularClasses: b.regularClasses.filter((_, idx) => idx !== i) }));
+  }
+
+  const inputStyle = { padding: '10px 12px', border: '1.5px solid var(--sand)', borderRadius: 8, fontSize: 15, fontFamily: 'DM Sans, sans-serif', background: 'var(--cream)', outline: 'none', width: '100%', boxSizing: 'border-box' };
+  const clsInput = { padding: '10px 8px', border: '1.5px solid var(--sand)', borderRadius: 8, fontSize: 14, fontFamily: 'DM Sans, sans-serif', background: 'var(--cream)', outline: 'none' };
+
+  function handleSave() {
+    if (!biz.name.trim()) { alert('Please enter a business name'); return; }
+    if (!biz.email.trim()) { alert('Please enter an accounts email'); return; }
+    onSave({ ...biz, invoicePrefix: biz.invoicePrefix || prefixFromName(biz.name) });
+  }
+
+  return (
+    <div className="modal-overlay" onClick={onClose} style={{ zIndex: 300 }}>
+      <div className="modal" style={{ maxHeight: '92vh' }} onClick={e => e.stopPropagation()}>
+        <div className="modal-handle" />
+        <div className="modal-title">{isEdit ? 'Edit Business' : 'Add Business'}</div>
+
+        <div className="field"><label>Business Name *</label>
+          <input style={inputStyle} value={biz.name} onChange={e => handleNameChange(e.target.value)} placeholder="e.g. Snap Fitness" />
+        </div>
+        <div className="field"><label>Accounts Email *</label>
+          <input style={inputStyle} value={biz.email} onChange={e => setBiz({...biz, email: e.target.value})} placeholder="accounts@business.com.au" />
+        </div>
+        <div className="field-row">
+          <div className="field"><label>Contact Name</label>
+            <input style={inputStyle} value={biz.contactName} onChange={e => setBiz({...biz, contactName: e.target.value})} placeholder="Jane Smith" />
+          </div>
+          <div className="field"><label>Contact Phone</label>
+            <input style={inputStyle} value={biz.contactPhone} onChange={e => setBiz({...biz, contactPhone: e.target.value})} placeholder="07 xxxx xxxx" />
+          </div>
+        </div>
+        <div className="field-row">
+          <div className="field"><label>Invoice Prefix</label>
+            <input style={inputStyle} value={biz.invoicePrefix} onChange={e => setBiz({...biz, invoicePrefix: e.target.value.toUpperCase()})} placeholder="SF" />
+          </div>
+          <div className="field"><label>Start Number</label>
+            <input style={inputStyle} type="number" value={biz.nextNumber} onChange={e => setBiz({...biz, nextNumber: parseInt(e.target.value)||108})} placeholder="108" />
+          </div>
+        </div>
+
+        <hr className="divider" />
+        <div style={{ fontSize: 13, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.8px', color: 'var(--sage-dark)', marginBottom: 10 }}>📅 Regular Classes</div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: '75px 1fr 55px 65px 34px', gap: 6, marginBottom: 6 }}>
+          {['Time','Class Name','Mins','$ Price',''].map((h,i) => (
+            <span key={i} style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.6px', color: 'var(--ink-muted)' }}>{h}</span>
+          ))}
+        </div>
+        {biz.regularClasses.map((cls, i) => (
+          <div key={i} style={{ display: 'grid', gridTemplateColumns: '75px 1fr 55px 65px 34px', gap: 6, marginBottom: 8, alignItems: 'center' }}>
+            <input value={cls.time} onChange={e => updateClass(i,'time',e.target.value)} placeholder="6:15pm" style={{...clsInput, textAlign:'center'}} />
+            <input value={cls.className} onChange={e => updateClass(i,'className',e.target.value)} placeholder="Class name" style={clsInput} />
+            <input value={cls.duration} onChange={e => updateClass(i,'duration',e.target.value)} placeholder="60" type="number" style={{...clsInput, textAlign:'center'}} />
+            <input value={cls.price} onChange={e => updateClass(i,'price',e.target.value)} placeholder="70" type="number" style={{...clsInput, textAlign:'center'}} />
+            <button onClick={() => removeClass(i)} disabled={biz.regularClasses.length<=1}
+              style={{ width:34, height:34, borderRadius:8, border:'none', background: biz.regularClasses.length<=1?'var(--sand)':'var(--danger-light)', color: biz.regularClasses.length<=1?'var(--sand-dark)':'var(--danger)', cursor: biz.regularClasses.length<=1?'default':'pointer', fontSize:18, display:'flex', alignItems:'center', justifyContent:'center' }}>×</button>
+          </div>
+        ))}
+        <button className="add-row-btn" onClick={addClass} style={{ marginTop: 4 }}><span>＋</span> Add class</button>
+
+        <div className="btn-row" style={{ marginTop: 20 }}>
+          <button className="btn btn-secondary" onClick={onClose}>Cancel</button>
+          <button className="btn btn-primary" onClick={handleSave}>{isEdit ? '✓ Save Changes' : '✓ Add Business'}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function InvoiceForm({ existing, invoices, onSave, onCancel, showToast }) {
   const isEdit = !!existing;
-  const [invoiceNumber] = useState(existing?.invoiceNumber || getNextInvoiceNumber(invoices));
+  const businesses = loadBusinesses();
+  const defaultBiz = existing?.businessId
+    ? (businesses.find(b => b.id === existing.businessId) || businesses[0])
+    : (businesses.find(b => b.isDefault) || businesses[0]);
+
+  const [selectedBiz, setSelectedBiz] = useState(defaultBiz);
+  const [showBizPicker, setShowBizPicker] = useState(false);
+  const [showAddBiz, setShowAddBiz] = useState(false);
+  const [allBusinesses, setAllBusinesses] = useState(businesses);
+
+  const [invoiceNumber, setInvoiceNumber] = useState(
+    existing?.invoiceNumber || getNextInvoiceNumberForBusiness(defaultBiz, invoices)
+  );
   const [date, setDate] = useState(existing?.date || todayStr());
   const [showCal, setShowCal] = useState(false);
-  // rowCal: index of row whose calendar is open, null if none
   const [rowCal, setRowCal] = useState(null);
-  const [rows, setRows] = useState(existing?.rows || defaultRows());
+  const [rows, setRows] = useState(existing?.rows || defaultRowsForBusiness(defaultBiz));
+
+  // When business changes, update invoice number and rows
+  function selectBusiness(biz) {
+    setSelectedBiz(biz);
+    setInvoiceNumber(getNextInvoiceNumberForBusiness(biz, invoices));
+    if (!isEdit) setRows(defaultRowsForBusiness(biz));
+    setShowBizPicker(false);
+  }
+
+  function handleAddBusiness(newBiz) {
+    const updated = [...allBusinesses, newBiz];
+    saveBusinesses(updated);
+    setAllBusinesses(updated);
+    setShowAddBiz(false);
+    selectBusiness(newBiz);
+  }
 
   const subtotal = rows.reduce((s, r) => s + (parseFloat(r.unitPrice) || 0), 0);
   const total = subtotal;
@@ -985,16 +1158,8 @@ function InvoiceForm({ existing, invoices, onSave, onCancel, showToast }) {
     setRows(r => r.map((row, idx) => idx === i ? { ...row, [field]: val } : row));
   }
   function addRow() {
-    const settings = loadSettings();
-    const first = settings.regularClasses?.[0] || {};
-    setRows(r => [...r, {
-      time: first.time || '6:15pm',
-      classDate: '',
-      className: first.className || 'Yoga - Forest Lake',
-      duration: first.duration || '60',
-      attendance: '',
-      unitPrice: first.price || '70',
-    }]);
+    const first = selectedBiz?.regularClasses?.[0] || {};
+    setRows(r => [...r, { time: first.time || '6:15pm', classDate: '', className: first.className || '', duration: first.duration || '60', attendance: '', unitPrice: first.price || '70' }]);
   }
   function removeRow(i) {
     if (rows.length === 1) return;
@@ -1004,12 +1169,9 @@ function InvoiceForm({ existing, invoices, onSave, onCancel, showToast }) {
 
   const [rowErrors, setRowErrors] = useState([]);
 
-  // A row is "filled" if it has attendance or unitPrice (the fields Grace must actively enter)
-  // className and day are pre-filled so shouldn't block saving
   function handleSave() {
     const filledRows = rows.filter(r => r.className);
     if (!filledRows.length) { showToast('Please add at least one class'); return; }
-    // Validate date and attendance on all class rows
     const errors = rows.map(r => {
       if (!r.className) return '';
       if (!r.classDate) return 'Select a date';
@@ -1018,8 +1180,7 @@ function InvoiceForm({ existing, invoices, onSave, onCancel, showToast }) {
     });
     setRowErrors(errors);
     if (errors.some(e => e)) {
-      const missing = errors.some(e => e === 'Select a date') ? '⚠️ Please select a date for all classes' : '⚠️ Please enter attendance for all classes';
-      showToast(missing);
+      showToast(errors.some(e => e === 'Select a date') ? '⚠️ Please select a date for all classes' : '⚠️ Please enter attendance for all classes');
       return;
     }
     const invoice = {
@@ -1029,6 +1190,9 @@ function InvoiceForm({ existing, invoices, onSave, onCancel, showToast }) {
       rows,
       subtotal,
       total,
+      businessId: selectedBiz.id,
+      businessName: selectedBiz.name,
+      businessEmail: selectedBiz.email,
       createdAt: existing?.createdAt || new Date().toISOString(),
       status: existing?.status || 'draft',
     };
@@ -1037,6 +1201,34 @@ function InvoiceForm({ existing, invoices, onSave, onCancel, showToast }) {
 
   return (
     <div>
+      {/* Add Business modal — rendered at top level so it sits above business picker */}
+      {showAddBiz && (
+        <BusinessModal
+          onSave={handleAddBusiness}
+          onClose={() => setShowAddBiz(false)}
+        />
+      )}
+
+      {/* Business picker modal */}
+      {showBizPicker && !showAddBiz && (
+        <div className="modal-overlay" onClick={() => setShowBizPicker(false)}>
+          <div className="modal" onClick={e => e.stopPropagation()}>
+            <div className="modal-handle" />
+            <div className="modal-title">Bill To</div>
+            {allBusinesses.map(biz => (
+              <div key={biz.id} onClick={() => selectBusiness(biz)}
+                style={{ padding: '14px 16px', borderRadius: 10, marginBottom: 8, background: biz.id === selectedBiz?.id ? 'var(--sage-light)' : 'var(--cream)', cursor: 'pointer', border: `1.5px solid ${biz.id === selectedBiz?.id ? 'var(--sage-dark)' : 'var(--sand)'}` }}>
+                <div style={{ fontWeight: 600, fontSize: 15, color: 'var(--ink)' }}>{biz.name}</div>
+                <div style={{ fontSize: 13, color: 'var(--ink-muted)', marginTop: 2 }}>{biz.email}</div>
+              </div>
+            ))}
+            <button className="add-row-btn" style={{ marginTop: 8 }} onClick={e => { e.stopPropagation(); setShowBizPicker(false); setShowAddBiz(true); }}>
+              <span>＋</span> Add new business
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Invoice date calendar */}
       {showCal && (
         <div className="modal-overlay" onClick={() => setShowCal(false)}>
@@ -1056,18 +1248,15 @@ function InvoiceForm({ existing, invoices, onSave, onCancel, showToast }) {
             <div className="modal-title">Class Date — Row {rowCal + 1}</div>
             <Calendar
               value={rows[rowCal]?.classDate ? (() => {
-                // classDate stored as dd/mm/yy, calendar needs dd/mm/yyyy
                 const parts = rows[rowCal].classDate.split('/');
                 if (parts[2]?.length === 2) return `${parts[0]}/${parts[1]}/20${parts[2]}`;
                 return rows[rowCal].classDate;
               })() : null}
               onChange={val => {
-                // store as dd/mm/yy short format
                 const parts = val.split('/');
                 const short = `${parts[0]}/${parts[1]}/${parts[2].slice(2)}`;
                 updateRow(rowCal, 'classDate', short);
                 setRowErrors(errs => errs.map((err, idx) => idx === rowCal ? '' : err));
-                // day is derived — no need to store separately
               }}
               onClose={() => setRowCal(null)}
             />
@@ -1080,21 +1269,28 @@ function InvoiceForm({ existing, invoices, onSave, onCancel, showToast }) {
         <div className="field-row">
           <div className="field">
             <label>Invoice #</label>
-            <input value={invoiceNumber} readOnly />
+            <input value={invoiceNumber} onChange={e => setInvoiceNumber(e.target.value)} style={{ background: 'white' }} />
           </div>
           <div className="field">
             <label>Date</label>
-            <input
-              value={date}
-              readOnly
-              onClick={() => setShowCal(true)}
-              style={{ cursor: 'pointer', background: 'white' }}
-            />
+            <input value={date} readOnly onClick={() => setShowCal(true)} style={{ cursor: 'pointer', background: 'white' }} />
+          </div>
+        </div>
+
+        {/* Bill To selector */}
+        <div className="field" style={{ marginBottom: 8 }}>
+          <label>Bill To</label>
+          <div onClick={() => setShowBizPicker(true)}
+            style={{ padding: '13px 16px', border: '1.5px solid var(--sand)', borderRadius: 10, background: 'white', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div>
+              <div style={{ fontWeight: 600, fontSize: 15, color: 'var(--ink)' }}>{selectedBiz?.name || 'Select business'}</div>
+              {selectedBiz?.email && <div style={{ fontSize: 12, color: 'var(--ink-muted)', marginTop: 2 }}>{selectedBiz.email}</div>}
+            </div>
+            <span style={{ color: 'var(--ink-muted)', fontSize: 18 }}>›</span>
           </div>
         </div>
 
         <div className="info-block">
-          <strong>To:</strong> Snap Fitness · brisbanegfm@tbhgroup.com.au<br/>
           <strong>From:</strong> Grace Crossland-Scott · ABN 59 726 072 982 · Not registered for GST
         </div>
       </div>
@@ -1200,22 +1396,33 @@ function InvoiceForm({ existing, invoices, onSave, onCancel, showToast }) {
 // ─── Settings Modal ───────────────────────────────────────────────────────────
 function SettingsModal({ onClose, showToast, onSettingsSaved }) {
   const [s, setS] = useState(loadSettings());
+  const [businesses, setBusinesses] = useState(loadBusinesses());
+  const [editingBiz, setEditingBiz] = useState(null);
+  const [confirmDeleteBiz, setConfirmDeleteBiz] = useState(null);
+  const [showAddBiz, setShowAddBiz] = useState(false);
 
-  function updateClass(i, field, val) {
-    setS(prev => ({
-      ...prev,
-      regularClasses: prev.regularClasses.map((cls, idx) => idx === i ? { ...cls, [field]: val } : cls),
-    }));
+  function handleSaveBusiness(biz) {
+    const updated = businesses.some(b => b.id === biz.id)
+      ? businesses.map(b => b.id === biz.id ? biz : b)
+      : [...businesses, biz];
+    saveBusinesses(updated);
+    setBusinesses(updated);
+    setEditingBiz(null);
+    setShowAddBiz(false);
   }
-  function addClass() {
-    setS(prev => ({
-      ...prev,
-      regularClasses: [...prev.regularClasses, { day: 'Thu', time: '6:15pm', className: 'Yoga - Forest Lake', duration: '60', price: '70' }],
-    }));
+  function handleDeleteBiz(id) {
+    if (businesses.length <= 1) { showToast('Must keep at least one business'); return; }
+    const updated = businesses.filter(b => b.id !== id);
+    // If deleting default, make first remaining the default
+    if (!updated.find(b => b.isDefault)) updated[0].isDefault = true;
+    saveBusinesses(updated);
+    setBusinesses(updated);
+    setConfirmDeleteBiz(null);
   }
-  function removeClass(i) {
-    if (s.regularClasses.length <= 1) return;
-    setS(prev => ({ ...prev, regularClasses: prev.regularClasses.filter((_, idx) => idx !== i) }));
+  function setDefault(id) {
+    const updated = businesses.map(b => ({ ...b, isDefault: b.id === id }));
+    saveBusinesses(updated);
+    setBusinesses(updated);
   }
 
   function handleSave() {
@@ -1225,96 +1432,69 @@ function SettingsModal({ onClose, showToast, onSettingsSaved }) {
     onClose();
   }
 
+  const sectionHead = (icon, label) => (
+    <div style={{ fontSize: 13, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.8px', color: 'var(--sage-dark)', marginBottom: 10, display: 'flex', alignItems: 'center', gap: 8 }}>
+      <span>{icon}</span> {label}
+    </div>
+  );
+
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal" style={{ maxHeight: '90vh' }} onClick={e => e.stopPropagation()}>
         <div className="modal-handle" />
         <div className="modal-title">Settings</div>
 
-        {/* ── Invoice Number ── */}
+        {(editingBiz || showAddBiz) && (
+          <BusinessModal
+            existing={editingBiz || null}
+            onSave={handleSaveBusiness}
+            onClose={() => { setEditingBiz(null); setShowAddBiz(false); }}
+          />
+        )}
+        {confirmDeleteBiz && (
+          <div className="modal-overlay" onClick={() => setConfirmDeleteBiz(null)}>
+            <div className="modal" onClick={e => e.stopPropagation()}>
+              <div className="modal-handle" />
+              <div className="modal-title">Remove Business?</div>
+              <p style={{ color: 'var(--ink-soft)', marginBottom: 24 }}>Remove <strong>{confirmDeleteBiz.name}</strong>? This won't affect existing invoices.</p>
+              <div className="btn-row">
+                <button className="btn btn-secondary" onClick={() => setConfirmDeleteBiz(null)}>Cancel</button>
+                <button className="btn btn-danger" onClick={() => handleDeleteBiz(confirmDeleteBiz.id)}>Remove</button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── Businesses ── */}
         <div style={{ marginBottom: 24 }}>
-          <div style={{ fontSize: 13, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.8px', color: 'var(--sage-dark)', marginBottom: 10, display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span>🔢</span> Reset Invoice Number
-          </div>
-          <div className="field" style={{ marginBottom: 6 }}>
-            <label>Next Invoice # (e.g. SF110)</label>
-            <input
-              placeholder="Leave blank to auto-increment"
-              value={s.invoiceNumberOverride}
-              onChange={e => setS({ ...s, invoiceNumberOverride: e.target.value })}
-            />
-          </div>
-          <div style={{ fontSize: 12, color: 'var(--ink-muted)', lineHeight: 1.5 }}>
-            Type a number like <strong>SF110</strong> to force the next new invoice to use that number. Cleared automatically after one use.
-          </div>
-        </div>
-
-        <hr className="divider" />
-
-        {/* ── Regular Classes ── */}
-        <div style={{ marginBottom: 24 }}>
-          <div style={{ fontSize: 13, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.8px', color: 'var(--sage-dark)', marginBottom: 4, display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span>📅</span> Regular Classes
-          </div>
-          <div style={{ fontSize: 12, color: 'var(--ink-muted)', marginBottom: 14, lineHeight: 1.5 }}>
-            These classes pre-fill every new invoice. Price defaults apply to all new rows.
-          </div>
-
-          {/* Class rows header */}
-          <div style={{ display: 'grid', gridTemplateColumns: '75px 1fr 55px 65px 34px', gap: 6, marginBottom: 6, padding: '0 2px' }}>
-            {['Time','Class Name','Mins','$ Price',''].map((h,i) => (
-              <span key={i} style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.6px', color: 'var(--ink-muted)' }}>{h}</span>
-            ))}
-          </div>
-
-          {s.regularClasses.map((cls, i) => (
-            <div key={i} style={{ display: 'grid', gridTemplateColumns: '75px 1fr 55px 65px 34px', gap: 6, marginBottom: 8, alignItems: 'center' }}>
-              <input
-                value={cls.time}
-                onChange={e => updateClass(i, 'time', e.target.value)}
-                placeholder="6:15pm"
-                style={{ padding: '10px 8px', border: '1.5px solid var(--sand)', borderRadius: 8, fontSize: 14, fontFamily: 'DM Sans, sans-serif', background: 'var(--cream)', outline: 'none', textAlign: 'center' }}
-              />
-              <input
-                value={cls.className}
-                onChange={e => updateClass(i, 'className', e.target.value)}
-                placeholder="Yoga - Forest Lake"
-                style={{ padding: '10px 10px', border: '1.5px solid var(--sand)', borderRadius: 8, fontSize: 14, fontFamily: 'DM Sans, sans-serif', background: 'var(--cream)', outline: 'none' }}
-              />
-              <input
-                value={cls.duration}
-                onChange={e => updateClass(i, 'duration', e.target.value)}
-                placeholder="60"
-                type="number"
-                style={{ padding: '10px 8px', border: '1.5px solid var(--sand)', borderRadius: 8, fontSize: 14, fontFamily: 'DM Sans, sans-serif', background: 'var(--cream)', outline: 'none', textAlign: 'center' }}
-              />
-              <input
-                value={cls.price}
-                onChange={e => updateClass(i, 'price', e.target.value)}
-                placeholder="70"
-                type="number"
-                style={{ padding: '10px 8px', border: '1.5px solid var(--sand)', borderRadius: 8, fontSize: 14, fontFamily: 'DM Sans, sans-serif', background: 'var(--cream)', outline: 'none', textAlign: 'center' }}
-              />
-              <button
-                onClick={() => removeClass(i)}
-                disabled={s.regularClasses.length <= 1}
-                style={{ width: 34, height: 34, borderRadius: 8, border: 'none', background: s.regularClasses.length <= 1 ? 'var(--sand)' : 'var(--danger-light)', color: s.regularClasses.length <= 1 ? 'var(--sand-dark)' : 'var(--danger)', cursor: s.regularClasses.length <= 1 ? 'default' : 'pointer', fontSize: 18, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-              >×</button>
+          {sectionHead('🏢', 'Businesses')}
+          {businesses.map(biz => (
+            <div key={biz.id} style={{ background: 'var(--cream)', borderRadius: 10, padding: '12px 14px', marginBottom: 10, border: '1.5px solid var(--sand)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontWeight: 600, fontSize: 15, color: 'var(--ink)', display: 'flex', alignItems: 'center', gap: 8 }}>
+                    {biz.name}
+                    {biz.isDefault && <span style={{ fontSize: 11, background: 'var(--sage-light)', color: 'var(--sage-dark)', padding: '2px 8px', borderRadius: 10, fontWeight: 600 }}>Default</span>}
+                  </div>
+                  <div style={{ fontSize: 13, color: 'var(--ink-muted)', marginTop: 3 }}>{biz.email}</div>
+                  <div style={{ fontSize: 12, color: 'var(--ink-muted)', marginTop: 2 }}>Prefix: <strong>{biz.invoicePrefix || prefixFromName(biz.name)}</strong> · {biz.regularClasses?.length || 0} class{biz.regularClasses?.length !== 1 ? 'es' : ''}</div>
+                </div>
+                <div style={{ display: 'flex', gap: 6, marginLeft: 8 }}>
+                  {!biz.isDefault && <button className="btn btn-secondary btn-sm" onClick={() => setDefault(biz.id)}>Set Default</button>}
+                  <button className="btn btn-secondary btn-sm" onClick={() => setEditingBiz(biz)}>✏️</button>
+                  <button className="btn btn-danger btn-sm" onClick={() => setConfirmDeleteBiz(biz)}>🗑</button>
+                </div>
+              </div>
             </div>
           ))}
-
-          <button className="add-row-btn" onClick={addClass} style={{ marginTop: 4 }}>
-            <span>＋</span> Add regular class
-          </button>
+          <button className="add-row-btn" onClick={() => setShowAddBiz(true)}><span>＋</span> Add business</button>
         </div>
 
         <hr className="divider" />
 
         {/* ── Banking Details ── */}
         <div style={{ marginBottom: 24 }}>
-          <div style={{ fontSize: 13, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.8px', color: 'var(--sage-dark)', marginBottom: 10, display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span>🏦</span> Banking Details
-          </div>
+          {sectionHead('🏦', 'Banking Details')}
           <div className="field">
             <label>Account Name</label>
             <input placeholder="Grace Crossland-Scott" value={s.bankAccountName} onChange={e => setS({...s, bankAccountName: e.target.value})} />
@@ -1322,7 +1502,7 @@ function SettingsModal({ onClose, showToast, onSettingsSaved }) {
           <div className="field-row">
             <div className="field">
               <label>BSB</label>
-              <input placeholder="484-799" value={s.bankBSB} onChange={e => setS({...s, bankBSB: e.target.value})} />
+              <input placeholder="484799" value={s.bankBSB} onChange={e => setS({...s, bankBSB: e.target.value})} />
             </div>
             <div className="field">
               <label>Account Number</label>
@@ -1335,13 +1515,11 @@ function SettingsModal({ onClose, showToast, onSettingsSaved }) {
 
         {/* ── Email ── */}
         <div>
-          <div style={{ fontSize: 13, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.8px', color: 'var(--sage-dark)', marginBottom: 10, display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span>✉️</span> Sending Invoices
-          </div>
+          {sectionHead('✉️', 'Sending Invoices')}
           <div className="info-block">
             Tapping <strong>✉️ Email</strong> on any invoice will:<br/><br/>
             1. Save the PDF to your iPad Files<br/>
-            2. Open Mail pre-addressed to Snap Fitness<br/>
+            2. Open Mail pre-addressed to the business<br/>
             3. Tap the paperclip → attach the PDF → Send
           </div>
         </div>
@@ -1361,26 +1539,23 @@ function InvoiceList({ invoices, setInvoices, onEdit, showToast }) {
   const [mailPrompt, setMailPrompt] = useState(null); // { invoice, mailtoUrl }
 
   function handleEmail(invoice) {
-    // On iOS, mailto must be triggered by a direct user tap — not after async/setTimeout.
-    // So: save PDF synchronously, then show a modal with an "Open Mail" button.
     try {
       const doc = generatePDF(invoice);
       const filename = `Grace Crossland-Scott ${invoice.invoiceNumber}.pdf`;
       doc.save(filename);
 
+      const bizEmail = invoice.businessEmail || 'brisbanegfm@tbhgroup.com.au';
+      const bizName = invoice.businessName || 'Snap Fitness';
       const subject = encodeURIComponent(`Invoice ${invoice.invoiceNumber} — Grace Crossland-Scott`);
       const body = encodeURIComponent(
         `Hi,\n\nPlease find attached invoice ${invoice.invoiceNumber} dated ${invoice.date} for $${invoice.total.toFixed(2)}.\n\nRegards,\nGrace Crossland-Scott`
       );
-      const mailtoUrl = `mailto:brisbanegfm@tbhgroup.com.au?subject=${subject}&body=${body}`;
+      const mailtoUrl = `mailto:${bizEmail}?subject=${subject}&body=${body}`;
 
-      // Mark as sent
       const updated = invoices.map(i => i.id === invoice.id ? { ...i, status: 'sent' } : i);
       setInvoices(updated);
       saveInvoices(updated);
-
-      // Show prompt — user must tap the button directly to trigger mailto on iOS
-      setMailPrompt({ invoice, mailtoUrl });
+      setMailPrompt({ invoice, mailtoUrl, bizName });
     } catch (err) {
       console.error(err);
       showToast('Something went wrong');
@@ -1440,7 +1615,7 @@ function InvoiceList({ invoices, setInvoices, onEdit, showToast }) {
               <strong>Grace Crossland-Scott {mailPrompt.invoice.invoiceNumber}.pdf</strong> has been saved to your Files.
             </p>
             <p style={{ color: 'var(--ink-soft)', marginBottom: 24, lineHeight: 1.6 }}>
-              Tap below to open Mail — it will be pre-addressed to Snap Fitness. Then attach the PDF and send.
+              Tap below to open Mail — pre-addressed to <strong>{mailPrompt.bizName}</strong>. Attach the PDF and send.
             </p>
             <div className="btn-row">
               <button className="btn btn-secondary" onClick={() => setMailPrompt(null)}>Close</button>
@@ -1476,7 +1651,7 @@ function InvoiceList({ invoices, setInvoices, onEdit, showToast }) {
                 <span className={`status-dot ${invoice.status === 'sent' ? 'sent' : 'draft'}`} />
                 {invoice.invoiceNumber}
               </div>
-              <div className="invoice-item-meta">{invoice.date} · Snap Fitness</div>
+              <div className="invoice-item-meta">{invoice.date} · {invoice.businessName || 'Snap Fitness'}</div>
             </div>
             <div className="invoice-item-amount">${invoice.total.toFixed(2)}</div>
           </div>
@@ -1514,10 +1689,13 @@ function App() {
   }
 
   function handleSave(invoice) {
-    // Clear invoice number override after it's been consumed
+    // Clear any invoice number override for this business
     const settings = loadSettings();
-    if (settings.invoiceNumberOverride) {
-      saveSettings({ ...settings, invoiceNumberOverride: '' });
+    const overrideKey = `invoiceOverride_${invoice.businessId}`;
+    if (settings[overrideKey]) {
+      const updated = { ...settings };
+      delete updated[overrideKey];
+      saveSettings(updated);
     }
     let updated;
     if (editingInvoice) {
