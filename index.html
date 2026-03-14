@@ -1,0 +1,1623 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Grace Invoices">
+<title>Grace Invoices</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+
+<style>
+  :root {
+    --cream: #FAF8F4;
+    --warm-white: #FFFFFF;
+    --ink: #1C1917;
+    --ink-soft: #44403C;
+    --ink-muted: #78716C;
+    --sage: #6B7C6E;
+    --sage-light: #E8EDE9;
+    --sage-dark: #4A5C4D;
+    --sand: #E8E0D4;
+    --sand-dark: #C4B9A8;
+    --accent: #C17F4A;
+    --accent-light: #F5EAD9;
+    --danger: #B45309;
+    --danger-light: #FEF3C7;
+    --success: #4A5C4D;
+    --radius: 16px;
+    --radius-sm: 10px;
+    --shadow: 0 4px 24px rgba(28,25,23,0.08);
+    --shadow-lg: 0 8px 40px rgba(28,25,23,0.12);
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+
+  html, body {
+    height: 100%;
+    background: var(--cream);
+    font-family: 'DM Sans', sans-serif;
+    color: var(--ink);
+    -webkit-font-smoothing: antialiased;
+    overscroll-behavior: none;
+  }
+
+  #root { height: 100%; }
+
+  h1, h2, h3 { font-family: 'DM Serif Display', serif; font-weight: 400; }
+
+  /* Layout */
+  .app {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    max-width: 900px;
+    margin: 0 auto;
+  }
+
+  /* Header */
+  .header {
+    background: var(--warm-white);
+    border-bottom: 1px solid var(--sand);
+    padding: 20px 24px 16px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+  }
+  .header-title { font-size: 26px; color: var(--ink); letter-spacing: -0.3px; }
+  .header-sub { font-size: 13px; color: var(--ink-muted); margin-top: 2px; font-family: 'DM Sans', sans-serif; }
+
+  /* Tab bar */
+  .tabs {
+    display: flex;
+    background: var(--warm-white);
+    border-bottom: 1px solid var(--sand);
+    padding: 0 16px;
+    gap: 4px;
+  }
+  .tab {
+    padding: 12px 20px;
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--ink-muted);
+    border: none;
+    background: none;
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    transition: all 0.2s;
+    font-family: 'DM Sans', sans-serif;
+  }
+  .tab.active {
+    color: var(--sage-dark);
+    border-bottom-color: var(--sage-dark);
+  }
+
+  /* Scrollable content */
+  .content {
+    flex: 1;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    padding: 24px 20px 100px;
+  }
+
+  /* Cards */
+  .card {
+    background: var(--warm-white);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    padding: 24px;
+    margin-bottom: 16px;
+  }
+  .card-title {
+    font-family: 'DM Serif Display', serif;
+    font-size: 18px;
+    margin-bottom: 16px;
+    color: var(--ink);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .card-title .badge {
+    background: var(--sage-light);
+    color: var(--sage-dark);
+    font-family: 'DM Sans', sans-serif;
+    font-size: 12px;
+    font-weight: 600;
+    padding: 3px 10px;
+    border-radius: 20px;
+    letter-spacing: 0.3px;
+  }
+
+  /* Form fields */
+  .field { margin-bottom: 16px; }
+  .field label {
+    display: block;
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    color: var(--ink-muted);
+    margin-bottom: 6px;
+  }
+  .field input, .field select {
+    width: 100%;
+    padding: 13px 16px;
+    border: 1.5px solid var(--sand);
+    border-radius: var(--radius-sm);
+    font-family: 'DM Sans', sans-serif;
+    font-size: 16px;
+    color: var(--ink);
+    background: var(--cream);
+    outline: none;
+    transition: border-color 0.2s;
+    -webkit-appearance: none;
+  }
+  .field input:focus, .field select:focus {
+    border-color: var(--sage);
+    background: white;
+  }
+  .field input[readonly] {
+    color: var(--ink-muted);
+    background: var(--sand);
+  }
+
+  .field-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+  }
+  .field-row-3 {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 12px;
+  }
+
+  /* Info block */
+  .info-block {
+    background: var(--sage-light);
+    border-radius: var(--radius-sm);
+    padding: 14px 16px;
+    font-size: 14px;
+    color: var(--sage-dark);
+    margin-bottom: 16px;
+    line-height: 1.5;
+  }
+  .info-block strong { font-weight: 600; }
+
+  /* Class rows */
+  .class-row {
+    display: grid;
+    grid-template-columns: 70px 80px 100px 1fr 65px 70px 80px 36px;
+    gap: 7px;
+    align-items: center;
+    margin-bottom: 10px;
+  }
+  .class-row .field { margin-bottom: 0; }
+  .class-header {
+    display: grid;
+    grid-template-columns: 70px 80px 100px 1fr 65px 70px 80px 36px;
+    gap: 7px;
+    margin-bottom: 6px;
+    padding: 0 2px;
+  }
+  .class-header span {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.7px;
+    color: var(--ink-muted);
+  }
+  .class-row input {
+    width: 100%;
+    padding: 12px 10px;
+    border: 1.5px solid var(--sand);
+    border-radius: var(--radius-sm);
+    font-family: 'DM Sans', sans-serif;
+    font-size: 15px;
+    color: var(--ink);
+    background: var(--cream);
+    outline: none;
+    transition: border-color 0.2s;
+    text-align: center;
+  }
+  .class-row input.text-left { text-align: left; }
+  .class-row input:focus {
+    border-color: var(--sage);
+    background: white;
+  }
+
+  /* Totals */
+  .totals {
+    background: var(--cream);
+    border-radius: var(--radius-sm);
+    padding: 16px 20px;
+    margin-top: 8px;
+  }
+  .total-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 6px 0;
+    font-size: 14px;
+    color: var(--ink-soft);
+  }
+  .total-row.final {
+    border-top: 1.5px solid var(--sand-dark);
+    margin-top: 6px;
+    padding-top: 12px;
+    font-size: 18px;
+    font-family: 'DM Serif Display', serif;
+    color: var(--ink);
+  }
+
+  /* Buttons */
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 14px 24px;
+    border-radius: var(--radius-sm);
+    font-family: 'DM Sans', sans-serif;
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+    border: none;
+    transition: all 0.2s;
+    white-space: nowrap;
+    min-height: 50px;
+  }
+  .btn-primary {
+    background: var(--sage-dark);
+    color: white;
+  }
+  .btn-primary:active { background: var(--sage); }
+  .btn-secondary {
+    background: var(--sand);
+    color: var(--ink);
+  }
+  .btn-secondary:active { background: var(--sand-dark); }
+  .btn-accent {
+    background: var(--accent);
+    color: white;
+  }
+  .btn-accent:active { opacity: 0.85; }
+  .btn-ghost {
+    background: transparent;
+    color: var(--ink-muted);
+    padding: 10px;
+    min-height: auto;
+  }
+  .btn-danger {
+    background: var(--danger-light);
+    color: var(--danger);
+  }
+  .btn-sm {
+    padding: 9px 16px;
+    font-size: 13px;
+    min-height: 38px;
+  }
+  .btn-full { width: 100%; }
+  .btn-row {
+    display: flex;
+    gap: 10px;
+    margin-top: 20px;
+    flex-wrap: wrap;
+  }
+  .btn-row .btn { flex: 1; min-width: 120px; }
+
+  /* Add row button */
+  .add-row-btn {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 14px;
+    border: 1.5px dashed var(--sand-dark);
+    border-radius: var(--radius-sm);
+    background: none;
+    color: var(--ink-muted);
+    font-family: 'DM Sans', sans-serif;
+    font-size: 14px;
+    cursor: pointer;
+    margin-top: 4px;
+    transition: all 0.2s;
+    width: 100%;
+  }
+  .add-row-btn:active { background: var(--sand); }
+
+  /* Delete row button */
+  .del-btn {
+    width: 36px;
+    height: 36px;
+    border-radius: 8px;
+    border: none;
+    background: var(--danger-light);
+    color: var(--danger);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+    flex-shrink: 0;
+    transition: all 0.2s;
+  }
+  .del-btn:active { opacity: 0.7; }
+
+  /* Invoice list */
+  .invoice-item {
+    background: var(--warm-white);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    padding: 18px 20px;
+    margin-bottom: 12px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+  .invoice-item-info { flex: 1; }
+  .invoice-item-num {
+    font-family: 'DM Serif Display', serif;
+    font-size: 20px;
+    color: var(--ink);
+  }
+  .invoice-item-meta {
+    font-size: 13px;
+    color: var(--ink-muted);
+    margin-top: 3px;
+  }
+  .invoice-item-amount {
+    font-family: 'DM Serif Display', serif;
+    font-size: 22px;
+    color: var(--sage-dark);
+    text-align: right;
+  }
+  .invoice-actions {
+    display: flex;
+    gap: 6px;
+    margin-top: 10px;
+    flex-wrap: wrap;
+  }
+
+  /* Empty state */
+  .empty {
+    text-align: center;
+    padding: 60px 30px;
+    color: var(--ink-muted);
+  }
+  .empty-icon { font-size: 48px; margin-bottom: 16px; }
+  .empty h3 { font-family: 'DM Serif Display', serif; font-size: 22px; color: var(--ink); margin-bottom: 8px; }
+  .empty p { font-size: 15px; line-height: 1.6; }
+
+  /* Toast */
+  .toast {
+    position: fixed;
+    bottom: 30px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--ink);
+    color: white;
+    padding: 14px 24px;
+    border-radius: 50px;
+    font-size: 14px;
+    font-weight: 500;
+    z-index: 1000;
+    animation: toastIn 0.3s ease;
+    white-space: nowrap;
+    max-width: 90vw;
+    text-align: center;
+  }
+  @keyframes toastIn {
+    from { opacity: 0; transform: translateX(-50%) translateY(20px); }
+    to { opacity: 1; transform: translateX(-50%) translateY(0); }
+  }
+
+  /* Modal */
+  .modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(28,25,23,0.5);
+    z-index: 200;
+    display: flex;
+    align-items: flex-end;
+    padding: 0;
+  }
+  .modal {
+    background: var(--warm-white);
+    border-radius: 24px 24px 0 0;
+    padding: 28px 24px 40px;
+    width: 100%;
+    max-height: 85vh;
+    overflow-y: auto;
+    animation: slideUp 0.3s ease;
+  }
+  @keyframes slideUp {
+    from { transform: translateY(100%); }
+    to { transform: translateY(0); }
+  }
+  .modal-handle {
+    width: 40px;
+    height: 4px;
+    background: var(--sand-dark);
+    border-radius: 2px;
+    margin: 0 auto 24px;
+  }
+  .modal-title {
+    font-family: 'DM Serif Display', serif;
+    font-size: 22px;
+    margin-bottom: 20px;
+  }
+
+  /* Calendar */
+  .calendar {
+    background: white;
+    border-radius: var(--radius);
+    padding: 16px;
+  }
+  .cal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 16px;
+  }
+  .cal-month {
+    font-family: 'DM Serif Display', serif;
+    font-size: 18px;
+  }
+  .cal-nav {
+    width: 36px;
+    height: 36px;
+    border-radius: 8px;
+    border: 1.5px solid var(--sand);
+    background: white;
+    cursor: pointer;
+    font-size: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .cal-grid {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 4px;
+  }
+  .cal-day-name {
+    text-align: center;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--ink-muted);
+    padding: 4px 0;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .cal-day {
+    aspect-ratio: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 8px;
+    font-size: 15px;
+    cursor: pointer;
+    border: none;
+    background: none;
+    color: var(--ink);
+    transition: all 0.15s;
+  }
+  .cal-day:active { background: var(--sand); }
+  .cal-day.today { font-weight: 600; color: var(--sage-dark); }
+  .cal-day.selected {
+    background: var(--sage-dark);
+    color: white;
+  }
+  .cal-day.other-month { color: var(--sand-dark); }
+  .cal-day.empty { cursor: default; }
+
+  /* Status indicator */
+  .status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    display: inline-block;
+    margin-right: 6px;
+  }
+  .status-dot.sent { background: var(--success); }
+  .status-dot.draft { background: var(--accent); }
+
+  /* Divider */
+  .divider {
+    border: none;
+    border-top: 1px solid var(--sand);
+    margin: 20px 0;
+  }
+
+  /* Scrollable on small screens */
+  @media (max-width: 600px) {
+    .class-header, .class-row {
+      grid-template-columns: 55px 65px 80px 1fr 55px 60px 70px 32px;
+      gap: 5px;
+    }
+    .card { padding: 18px; }
+    .content { padding: 16px 14px 100px; }
+  }
+
+  /* Email setup banner */
+  .setup-banner {
+    background: var(--accent-light);
+    border: 1.5px solid var(--accent);
+    border-radius: var(--radius-sm);
+    padding: 14px 16px;
+    margin-bottom: 16px;
+    font-size: 14px;
+    color: var(--ink-soft);
+    line-height: 1.5;
+  }
+  .setup-banner strong { color: var(--accent); }
+
+  input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/babel">
+const { useState, useEffect, useCallback, useRef } = React;
+const { jsPDF } = window.jspdf;
+
+// ─── Storage helpers ──────────────────────────────────────────────────────────
+const STORAGE_KEY = 'grace_invoices_v1';
+const SETTINGS_KEY = 'grace_invoices_settings_v1';
+
+function loadInvoices() {
+  try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]'); }
+  catch { return []; }
+}
+function saveInvoices(list) {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
+}
+function loadSettings() {
+  try {
+    const stored = JSON.parse(localStorage.getItem(SETTINGS_KEY) || 'null');
+    const defaults = {
+      emailjsServiceId: '',
+      emailjsTemplateId: '',
+      emailjsPublicKey: '',
+      invoiceNumberOverride: '',
+      bankAccountName: 'Grace Crossland-Scott',
+      bankBSB: '484-799',
+      bankAccountNumber: '051 713 949',
+      regularClasses: [
+        { day: 'Thu', time: '6:15pm', className: 'Yoga - Forest Lake', duration: '60', price: '70' },
+      ],
+    };
+    return stored ? { ...defaults, ...stored } : defaults;
+  } catch {
+    return {
+      emailjsServiceId: '', emailjsTemplateId: '', emailjsPublicKey: '',
+      invoiceNumberOverride: '',
+      bankAccountName: 'Grace Crossland-Scott',
+      bankBSB: '484-799',
+      bankAccountNumber: '051 713 949',
+      regularClasses: [
+        { day: 'Thu', time: '6:15pm', className: 'Yoga - Forest Lake', duration: '60', price: '70' },
+      ],
+    };
+  }
+}
+function saveSettings(s) {
+  localStorage.setItem(SETTINGS_KEY, JSON.stringify(s));
+}
+
+// ─── Invoice number helpers ───────────────────────────────────────────────────
+function getNextInvoiceNumber(invoices) {
+  const settings = loadSettings();
+  // If an override is set, use it and clear it
+  if (settings.invoiceNumberOverride && settings.invoiceNumberOverride.trim()) {
+    return settings.invoiceNumberOverride.trim().toUpperCase();
+  }
+  if (!invoices.length) return 'SF108';
+  const nums = invoices.map(i => {
+    const n = parseInt(i.invoiceNumber.replace(/[^0-9]/g, ''));
+    return isNaN(n) ? 0 : n;
+  });
+  return 'SF' + (Math.max(...nums) + 1);
+}
+
+// ─── Date helpers ─────────────────────────────────────────────────────────────
+function todayStr() {
+  const d = new Date();
+  return `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()}`;
+}
+function parseDate(str) {
+  const [d,m,y] = str.split('/').map(Number);
+  return new Date(y, m-1, d);
+}
+function formatDate(date) {
+  return `${String(date.getDate()).padStart(2,'0')}/${String(date.getMonth()+1).padStart(2,'0')}/${date.getFullYear()}`;
+}
+function formatDateShort(date) {
+  return `${String(date.getDate()).padStart(2,'0')}/${String(date.getMonth()+1).padStart(2,'0')}/${String(date.getFullYear()).slice(2)}`;
+}
+const DAY_NAMES = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+// Returns short day name from dd/mm/yy string, e.g. "Thu"
+function dayFromDateShort(str) {
+  if (!str) return '';
+  const parts = str.split('/');
+  if (parts.length !== 3) return '';
+  const [d, m, y] = parts.map(Number);
+  const year = y < 100 ? 2000 + y : y;
+  const date = new Date(year, m - 1, d);
+  return isNaN(date.getTime()) ? '' : DAY_NAMES[date.getDay()];
+}
+
+// ─── Logo (base64, black bg removed → transparent) ───────────────────────────
+const LOGO_B64 = 'data:image/png;base64,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';
+
+// ─── PDF Generator ────────────────────────────────────────────────────────────
+function generatePDF(invoice) {
+  const doc = new jsPDF({ unit: 'mm', format: 'a4' });
+  const W = 210, margin = 20;
+
+  // Background
+  doc.setFillColor(250, 248, 244);
+  doc.rect(0, 0, W, 297, 'F');
+
+  // Taller header bar to accommodate logo + padding
+  doc.setFillColor(74, 92, 77);
+  doc.rect(0, 0, W, 56, 'F');
+
+  // Logo — centred, 28mm wide, 6mm top padding
+  const logoW = 28, logoH = 28;
+  const logoX = (W - logoW) / 2;
+  try { doc.addImage(LOGO_B64, 'PNG', logoX, 6, logoW, logoH); } catch(e) {}
+
+  // Invoice line below logo
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(14);
+  doc.setTextColor(255, 255, 255);
+  doc.text(`INVOICE  #  ${invoice.invoiceNumber}`, margin, 50);
+  doc.text(`Date: ${invoice.date}`, W - margin, 50, { align: 'right' });
+
+  // From / To columns
+  const col1 = margin, col2 = 115;
+  let y = 70;
+
+  doc.setTextColor(120, 113, 108);
+  doc.setFontSize(8);
+  doc.setFont('helvetica', 'bold');
+  doc.text('FROM', col1, y);
+  doc.text('TO', col2, y);
+  y += 6;
+
+  doc.setTextColor(28, 25, 23);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(12);
+  doc.text('Grace Crossland-Scott', col1, y);
+  doc.text('Snap Fitness', col2, y);
+  y += 6;
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(10);
+  doc.setTextColor(68, 64, 60);
+  doc.text('ABN 59 726 072 982', col1, y);
+  doc.text('brisbanegfm@tbhgroup.com.au', col2, y);
+  y += 5;
+  doc.text('gr8shapegrace@gmail.com', col1, y);
+  y += 5;
+  doc.text('Phone 0418 208 866', col1, y);
+  y += 5;
+  doc.text('Not Registered for GST', col1, y);
+
+  // Gap between from/to block and table — same as gap between table and bottom cards
+  y += 14;
+
+  // Table
+  const filledRows = invoice.rows.filter(r => r.className || r.attendance || r.unitPrice);
+
+  const head = [['Day', 'Time', 'Date', 'Class', 'Duration (mins)', 'Attendance', 'Unit Price']];
+  const body = filledRows.map(r => [
+    dayFromDateShort(r.classDate) || r.day || '',
+    r.time || '',
+    r.classDate || '',
+    r.className || '',
+    r.duration || '',
+    r.attendance || '',
+    r.unitPrice ? `$${parseFloat(r.unitPrice).toFixed(2)}` : '$0.00'
+  ]);
+
+  // Table — clean rounded card with perfectly aligned header fill
+  const tableStartY = y;
+  const tableW = W - margin * 2;
+  const tblMargin = { left: margin + 1, right: margin + 1 };
+  const colStyles = {
+    0: { cellWidth: 14 },
+    1: { cellWidth: 19 },
+    2: { cellWidth: 20 },
+    3: { cellWidth: 'auto' },
+    4: { cellWidth: 24 },
+    5: { cellWidth: 24 },
+    6: { cellWidth: 24 },
+  };
+  const cellPadH = { top: 7, bottom: 7, left: 3, right: 2 };
+  const cellPadB = { top: 8, bottom: 8, left: 3, right: 2 };
+
+  // Dry run (invisible) to measure exact finalY and header row height
+  let measuredHdrH = 0;
+  doc.autoTable({
+    startY: tableStartY,
+    head, body,
+    theme: 'plain',
+    headStyles: { fillColor: [250,248,244], textColor: [250,248,244], lineWidth: 0, cellPadding: cellPadH, fontSize: 9, fontStyle: 'bold' },
+    bodyStyles: { fillColor: [250,248,244], textColor: [250,248,244], lineWidth: 0, cellPadding: cellPadB, fontSize: 10 },
+    alternateRowStyles: { fillColor: [250,248,244] },
+    styles: { lineWidth: 0, overflow: 'linebreak' },
+    columnStyles: colStyles,
+    margin: tblMargin,
+    didDrawCell(data) {
+      if (data.section === 'head' && data.column.index === 0) {
+        measuredHdrH = data.cell.height;
+      }
+    },
+  });
+  const tableH = doc.lastAutoTable.finalY - tableStartY;
+
+  // Draw full card background (white, rounded)
+  doc.setFillColor(255, 255, 255);
+  doc.roundedRect(margin, tableStartY, tableW, tableH, 4, 4, 'F');
+
+  // Draw header fill exactly matching measured height:
+  // Use a rounded rect for the whole header zone, then overdraw bottom portion with white
+  // so only the top rounded corners are curved and the bottom is flat
+  doc.setFillColor(232, 237, 233);
+  doc.roundedRect(margin, tableStartY, tableW, measuredHdrH, 4, 4, 'F');
+  // Overdraw bottom ~4mm of header zone with white to remove the bottom rounded corners
+  doc.setFillColor(255, 255, 255);
+  doc.rect(margin, tableStartY + measuredHdrH - 4, tableW, 4, 'F');
+  // Redraw the header fill as a plain rect in the bottom portion (flat bottom edge)
+  doc.setFillColor(232, 237, 233);
+  doc.rect(margin, tableStartY + measuredHdrH - 4, tableW, 4, 'F');
+
+  // Real render — transparent fills, text only drawn on top of backgrounds
+  doc.autoTable({
+    startY: tableStartY,
+    head, body,
+    theme: 'plain',
+    headStyles: {
+      fillColor: false,
+      textColor: [74, 92, 77],
+      fontStyle: 'bold',
+      fontSize: 9,
+      cellPadding: cellPadH,
+      lineWidth: 0,
+    },
+    bodyStyles: {
+      fillColor: false,
+      fontSize: 10,
+      cellPadding: cellPadB,
+      textColor: [28, 25, 23],
+      lineWidth: 0,
+    },
+    alternateRowStyles: { fillColor: false },
+    styles: { lineWidth: 0, overflow: 'linebreak' },
+    columnStyles: colStyles,
+    margin: tblMargin,
+    didDrawCell(data) {
+      // Draw divider line exactly at the bottom of the header row
+      if (data.section === 'head' && data.column.index === 0) {
+        const lineY = data.cell.y + data.cell.height;
+        doc.setDrawColor(200, 210, 200);
+        doc.setLineWidth(0.4);
+        doc.line(margin, lineY, margin + tableW, lineY);
+      }
+    },
+  });
+
+  // Rounded stroke border — drawn last, sits on top
+  doc.setDrawColor(200, 210, 200);
+  doc.setLineWidth(0.6);
+  doc.roundedRect(margin, tableStartY, tableW, tableH, 4, 4, 'S');
+
+  // ── Layout constants for bottom two cards ──
+  const cardTop = doc.lastAutoTable.finalY + 8;
+  const cardPad = 7;    // inner horizontal padding
+  const cardH = 52;     // tall enough for 3 rows + divider with equal breathing room
+
+  // ── Totals card ──
+  const totalsBoxX = W / 2 + 4;
+  const totalsBoxW = W - margin - totalsBoxX;
+  const totalsInnerL = totalsBoxX + cardPad;
+  const totalsInnerR = totalsBoxX + totalsBoxW - cardPad;
+
+  doc.setFillColor(232, 237, 233);
+  doc.roundedRect(totalsBoxX, cardTop, totalsBoxW, cardH, 4, 4, 'F');
+
+  // Evenly space: topPad, line1, gap, line2, gap, divider, gap, line3, botPad
+  // Use fixed rhythm: lines at +9, +20, divider at +30, line3 at +42
+  const line1Y = cardTop + 11;
+  doc.setFontSize(10);
+  doc.setTextColor(68, 64, 60);
+  doc.setFont('helvetica', 'normal');
+  doc.text('Sub Total', totalsInnerL, line1Y);
+  doc.text(`$${invoice.subtotal.toFixed(2)}`, totalsInnerR, line1Y, { align: 'right' });
+
+  const line2Y = cardTop + 22;
+  doc.text('Total GST', totalsInnerL, line2Y);
+  doc.text('$0.00', totalsInnerR, line2Y, { align: 'right' });
+
+  // Divider — inset to text edges, centred between line2 and line3
+  const divY = cardTop + 31;
+  doc.setDrawColor(120, 113, 108);
+  doc.setLineWidth(0.4);
+  doc.line(totalsInnerL, divY, totalsInnerR, divY);
+
+  // Total Amount — sits comfortably inside card bottom
+  const line3Y = cardTop + 44;
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(12);
+  doc.setTextColor(74, 92, 77);
+  doc.text('Total Amount', totalsInnerL, line3Y);
+  doc.text(`$${invoice.total.toFixed(2)}`, totalsInnerR, line3Y, { align: 'right' });
+
+  // ── Banking card — same height, vertically centred content ──
+  const bankSettings = loadSettings();
+  const bankBoxX = margin;
+  const bankBoxW = W / 2 - margin - 4;
+  const bankInnerL = bankBoxX + cardPad;
+
+  doc.setFillColor(232, 237, 233);
+  doc.roundedRect(bankBoxX, cardTop, bankBoxW, cardH, 4, 4, 'F');
+
+  const bankLines = [
+    { label: '',              value: 'BANKING DETAILS', bold: true,  size: 8,  labelColor: [74, 92, 77],  valueColor: [74, 92, 77] },
+    { label: 'Account Name: ', value: bankSettings.bankAccountName || 'Grace Crossland-Scott', bold: true, size: 9, labelColor: [68, 64, 60], valueColor: [28, 25, 23] },
+    { label: 'BSB: ',          value: (bankSettings.bankBSB || '484799').replace(/-/g, ''),    bold: true, size: 9, labelColor: [68, 64, 60], valueColor: [28, 25, 23] },
+    { label: 'Account #: ',    value: bankSettings.bankAccountNumber || '051 713 949',         bold: true, size: 9, labelColor: [68, 64, 60], valueColor: [28, 25, 23] },
+  ];
+  const lineSpacing = 7;
+  const totalTextH = (bankLines.length - 1) * lineSpacing;
+  const bankTextStartY = cardTop + (cardH - totalTextH) / 2 + 2;
+
+  bankLines.forEach((line, i) => {
+    const lineY = bankTextStartY + i * lineSpacing;
+    doc.setFontSize(line.size);
+    // Draw label (normal weight)
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(...line.labelColor);
+    const labelW = line.label ? doc.getTextWidth(line.label) : 0;
+    if (line.label) doc.text(line.label, bankInnerL, lineY);
+    // Draw value (bold)
+    doc.setFont('helvetica', line.bold ? 'bold' : 'normal');
+    doc.setTextColor(...line.valueColor);
+    doc.text(line.value, bankInnerL + labelW, lineY);
+  });
+
+  return doc;
+}
+
+// ─── Calendar Component ───────────────────────────────────────────────────────
+function Calendar({ value, onChange, onClose }) {
+  const today = new Date();
+  const initial = value ? parseDate(value) : today;
+  const [view, setView] = useState({ year: initial.getFullYear(), month: initial.getMonth() });
+
+  const DAYS = ['Su','Mo','Tu','We','Th','Fr','Sa'];
+  const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+
+  const firstDay = new Date(view.year, view.month, 1).getDay();
+  const daysInMonth = new Date(view.year, view.month + 1, 0).getDate();
+  const daysInPrev = new Date(view.year, view.month, 0).getDate();
+
+  const cells = [];
+  for (let i = 0; i < firstDay; i++) cells.push({ day: daysInPrev - firstDay + 1 + i, other: true });
+  for (let d = 1; d <= daysInMonth; d++) cells.push({ day: d, other: false });
+  while (cells.length % 7 !== 0) cells.push({ day: cells.length - daysInMonth - firstDay + 1, other: true });
+
+  const selDate = value ? parseDate(value) : null;
+
+  function prevMonth() {
+    setView(v => v.month === 0 ? { year: v.year-1, month: 11 } : { year: v.year, month: v.month-1 });
+  }
+  function nextMonth() {
+    setView(v => v.month === 11 ? { year: v.year+1, month: 0 } : { year: v.year, month: v.month+1 });
+  }
+
+  return (
+    <div className="calendar">
+      <div className="cal-header">
+        <button className="cal-nav" onClick={prevMonth}>‹</button>
+        <span className="cal-month">{MONTHS[view.month]} {view.year}</span>
+        <button className="cal-nav" onClick={nextMonth}>›</button>
+      </div>
+      <div className="cal-grid">
+        {DAYS.map(d => <div key={d} className="cal-day-name">{d}</div>)}
+        {cells.map((cell, i) => {
+          const isToday = !cell.other && cell.day === today.getDate() && view.month === today.getMonth() && view.year === today.getFullYear();
+          const isSel = selDate && !cell.other && cell.day === selDate.getDate() && view.month === selDate.getMonth() && view.year === selDate.getFullYear();
+          return (
+            <button
+              key={i}
+              className={`cal-day ${isToday ? 'today' : ''} ${isSel ? 'selected' : ''} ${cell.other ? 'other-month' : ''}`}
+              onClick={() => {
+                if (!cell.other) {
+                  onChange(formatDate(new Date(view.year, view.month, cell.day)));
+                  onClose();
+                }
+              }}
+            >{cell.day}</button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ─── Invoice Form ─────────────────────────────────────────────────────────────
+function defaultRows() {
+  const settings = loadSettings();
+  const first = settings.regularClasses?.[0] || {};
+  return [{
+    time: first.time || '6:15pm',
+    classDate: '',
+    className: first.className || 'Yoga - Forest Lake',
+    duration: first.duration || '60',
+    attendance: '',
+    unitPrice: first.price || '70',
+  }];
+}
+
+function InvoiceForm({ existing, invoices, onSave, onCancel, showToast }) {
+  const isEdit = !!existing;
+  const [invoiceNumber] = useState(existing?.invoiceNumber || getNextInvoiceNumber(invoices));
+  const [date, setDate] = useState(existing?.date || todayStr());
+  const [showCal, setShowCal] = useState(false);
+  // rowCal: index of row whose calendar is open, null if none
+  const [rowCal, setRowCal] = useState(null);
+  const [rows, setRows] = useState(existing?.rows || defaultRows());
+
+  const subtotal = rows.reduce((s, r) => s + (parseFloat(r.unitPrice) || 0), 0);
+  const total = subtotal;
+
+  function updateRow(i, field, val) {
+    setRows(r => r.map((row, idx) => idx === i ? { ...row, [field]: val } : row));
+  }
+  function addRow() {
+    const settings = loadSettings();
+    const first = settings.regularClasses?.[0] || {};
+    setRows(r => [...r, {
+      time: first.time || '6:15pm',
+      classDate: '',
+      className: first.className || 'Yoga - Forest Lake',
+      duration: first.duration || '60',
+      attendance: '',
+      unitPrice: first.price || '70',
+    }]);
+  }
+  function removeRow(i) {
+    if (rows.length === 1) return;
+    setRows(r => r.filter((_, idx) => idx !== i));
+    setRowErrors(e => e.filter((_, idx) => idx !== i));
+  }
+
+  const [rowErrors, setRowErrors] = useState([]);
+
+  // A row is "filled" if it has attendance or unitPrice (the fields Grace must actively enter)
+  // className and day are pre-filled so shouldn't block saving
+  function handleSave() {
+    const filledRows = rows.filter(r => r.className);
+    if (!filledRows.length) { showToast('Please add at least one class'); return; }
+    // Validate date and attendance on all class rows
+    const errors = rows.map(r => {
+      if (!r.className) return '';
+      if (!r.classDate) return 'Select a date';
+      if (!r.attendance) return 'Enter attendance';
+      return '';
+    });
+    setRowErrors(errors);
+    if (errors.some(e => e)) {
+      const missing = errors.some(e => e === 'Select a date') ? '⚠️ Please select a date for all classes' : '⚠️ Please enter attendance for all classes';
+      showToast(missing);
+      return;
+    }
+    const invoice = {
+      id: existing?.id || Date.now().toString(),
+      invoiceNumber,
+      date,
+      rows,
+      subtotal,
+      total,
+      createdAt: existing?.createdAt || new Date().toISOString(),
+      status: existing?.status || 'draft',
+    };
+    onSave(invoice);
+  }
+
+  return (
+    <div>
+      {/* Invoice date calendar */}
+      {showCal && (
+        <div className="modal-overlay" onClick={() => setShowCal(false)}>
+          <div className="modal" onClick={e => e.stopPropagation()}>
+            <div className="modal-handle" />
+            <div className="modal-title">Invoice Date</div>
+            <Calendar value={date} onChange={setDate} onClose={() => setShowCal(false)} />
+          </div>
+        </div>
+      )}
+
+      {/* Row date calendar */}
+      {rowCal !== null && (
+        <div className="modal-overlay" onClick={() => setRowCal(null)}>
+          <div className="modal" onClick={e => e.stopPropagation()}>
+            <div className="modal-handle" />
+            <div className="modal-title">Class Date — Row {rowCal + 1}</div>
+            <Calendar
+              value={rows[rowCal]?.classDate ? (() => {
+                // classDate stored as dd/mm/yy, calendar needs dd/mm/yyyy
+                const parts = rows[rowCal].classDate.split('/');
+                if (parts[2]?.length === 2) return `${parts[0]}/${parts[1]}/20${parts[2]}`;
+                return rows[rowCal].classDate;
+              })() : null}
+              onChange={val => {
+                // store as dd/mm/yy short format
+                const parts = val.split('/');
+                const short = `${parts[0]}/${parts[1]}/${parts[2].slice(2)}`;
+                updateRow(rowCal, 'classDate', short);
+                setRowErrors(errs => errs.map((err, idx) => idx === rowCal ? '' : err));
+                // day is derived — no need to store separately
+              }}
+              onClose={() => setRowCal(null)}
+            />
+          </div>
+        </div>
+      )}
+
+      <div className="card">
+        <div className="card-title">Invoice Details</div>
+        <div className="field-row">
+          <div className="field">
+            <label>Invoice #</label>
+            <input value={invoiceNumber} readOnly />
+          </div>
+          <div className="field">
+            <label>Date</label>
+            <input
+              value={date}
+              readOnly
+              onClick={() => setShowCal(true)}
+              style={{ cursor: 'pointer', background: 'white' }}
+            />
+          </div>
+        </div>
+
+        <div className="info-block">
+          <strong>To:</strong> Snap Fitness · brisbanegfm@tbhgroup.com.au<br/>
+          <strong>From:</strong> Grace Crossland-Scott · ABN 59 726 072 982 · Not registered for GST
+        </div>
+      </div>
+
+      <div className="card">
+        <div className="card-title">
+          Classes
+          <span className="badge">{rows.filter(r => r.className).length} added</span>
+        </div>
+
+        <div className="class-header">
+          <span>Day</span>
+          <span>Time</span>
+          <span>Date</span>
+          <span>Class</span>
+          <span>Mins</span>
+          <span>Attend.</span>
+          <span>$ Price</span>
+          <span></span>
+        </div>
+
+        {rows.map((row, i) => (
+          <div className="class-row" key={i}>
+            <input
+              value={dayFromDateShort(row.classDate)}
+              readOnly
+              style={{ background: 'var(--sand)', color: 'var(--ink-soft)', textAlign: 'center', cursor: 'default' }}
+            />
+            <input
+              placeholder="6:15pm"
+              value={row.time}
+              onChange={e => updateRow(i, 'time', e.target.value)}
+              className="text-left"
+            />
+            <input
+              placeholder="Tap to select"
+              value={row.classDate}
+              readOnly
+              onClick={() => setRowCal(i)}
+              style={{ cursor: 'pointer', background: 'white', ...(rowErrors[i] === 'Select a date' ? { borderColor: 'var(--danger)', background: '#FFF5F0' } : {}) }}
+            />
+            <input
+              placeholder="Yoga - Forest Lake"
+              value={row.className}
+              onChange={e => updateRow(i, 'className', e.target.value)}
+              className="text-left"
+            />
+            <input
+              placeholder="60"
+              type="number"
+              value={row.duration}
+              onChange={e => updateRow(i, 'duration', e.target.value)}
+            />
+            <input
+              type="number"
+              value={row.attendance}
+              onChange={e => {
+                updateRow(i, 'attendance', e.target.value);
+                setRowErrors(errs => errs.map((err, idx) => idx === i ? '' : err));
+              }}
+              style={rowErrors[i] ? { borderColor: 'var(--danger)', background: '#FFF5F0' } : {}}
+            />
+            <input
+              placeholder="70"
+              type="number"
+              value={row.unitPrice}
+              onChange={e => updateRow(i, 'unitPrice', e.target.value)}
+            />
+            <button className="del-btn" onClick={() => removeRow(i)}>×</button>
+          </div>
+        ))}
+
+        <button className="add-row-btn" onClick={addRow}>
+          <span>＋</span> Add class
+        </button>
+
+        <div className="totals">
+          <div className="total-row">
+            <span>Sub Total</span>
+            <span>${subtotal.toFixed(2)}</span>
+          </div>
+          <div className="total-row">
+            <span>Total GST</span>
+            <span>$0.00</span>
+          </div>
+          <div className="total-row final">
+            <span>Total Amount</span>
+            <span>${total.toFixed(2)}</span>
+          </div>
+        </div>
+      </div>
+
+      <div className="btn-row">
+        {onCancel && <button className="btn btn-secondary" onClick={onCancel}>Cancel</button>}
+        <button className="btn btn-primary" onClick={handleSave}>
+          {isEdit ? '✓ Save Changes' : '✓ Save Invoice'}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ─── Settings Modal ───────────────────────────────────────────────────────────
+function SettingsModal({ onClose, showToast, onSettingsSaved }) {
+  const [s, setS] = useState(loadSettings());
+
+  function updateClass(i, field, val) {
+    setS(prev => ({
+      ...prev,
+      regularClasses: prev.regularClasses.map((cls, idx) => idx === i ? { ...cls, [field]: val } : cls),
+    }));
+  }
+  function addClass() {
+    setS(prev => ({
+      ...prev,
+      regularClasses: [...prev.regularClasses, { day: 'Thu', time: '6:15pm', className: 'Yoga - Forest Lake', duration: '60', price: '70' }],
+    }));
+  }
+  function removeClass(i) {
+    if (s.regularClasses.length <= 1) return;
+    setS(prev => ({ ...prev, regularClasses: prev.regularClasses.filter((_, idx) => idx !== i) }));
+  }
+
+  function handleSave() {
+    saveSettings(s);
+    onSettingsSaved();
+    showToast('✓ Settings saved');
+    onClose();
+  }
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal" style={{ maxHeight: '90vh' }} onClick={e => e.stopPropagation()}>
+        <div className="modal-handle" />
+        <div className="modal-title">Settings</div>
+
+        {/* ── Invoice Number ── */}
+        <div style={{ marginBottom: 24 }}>
+          <div style={{ fontSize: 13, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.8px', color: 'var(--sage-dark)', marginBottom: 10, display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span>🔢</span> Reset Invoice Number
+          </div>
+          <div className="field" style={{ marginBottom: 6 }}>
+            <label>Next Invoice # (e.g. SF110)</label>
+            <input
+              placeholder="Leave blank to auto-increment"
+              value={s.invoiceNumberOverride}
+              onChange={e => setS({ ...s, invoiceNumberOverride: e.target.value })}
+            />
+          </div>
+          <div style={{ fontSize: 12, color: 'var(--ink-muted)', lineHeight: 1.5 }}>
+            Type a number like <strong>SF110</strong> to force the next new invoice to use that number. Cleared automatically after one use.
+          </div>
+        </div>
+
+        <hr className="divider" />
+
+        {/* ── Regular Classes ── */}
+        <div style={{ marginBottom: 24 }}>
+          <div style={{ fontSize: 13, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.8px', color: 'var(--sage-dark)', marginBottom: 4, display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span>📅</span> Regular Classes
+          </div>
+          <div style={{ fontSize: 12, color: 'var(--ink-muted)', marginBottom: 14, lineHeight: 1.5 }}>
+            These classes pre-fill every new invoice. Price defaults apply to all new rows.
+          </div>
+
+          {/* Class rows header */}
+          <div style={{ display: 'grid', gridTemplateColumns: '75px 1fr 55px 65px 34px', gap: 6, marginBottom: 6, padding: '0 2px' }}>
+            {['Time','Class Name','Mins','$ Price',''].map((h,i) => (
+              <span key={i} style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.6px', color: 'var(--ink-muted)' }}>{h}</span>
+            ))}
+          </div>
+
+          {s.regularClasses.map((cls, i) => (
+            <div key={i} style={{ display: 'grid', gridTemplateColumns: '75px 1fr 55px 65px 34px', gap: 6, marginBottom: 8, alignItems: 'center' }}>
+              <input
+                value={cls.time}
+                onChange={e => updateClass(i, 'time', e.target.value)}
+                placeholder="6:15pm"
+                style={{ padding: '10px 8px', border: '1.5px solid var(--sand)', borderRadius: 8, fontSize: 14, fontFamily: 'DM Sans, sans-serif', background: 'var(--cream)', outline: 'none', textAlign: 'center' }}
+              />
+              <input
+                value={cls.className}
+                onChange={e => updateClass(i, 'className', e.target.value)}
+                placeholder="Yoga - Forest Lake"
+                style={{ padding: '10px 10px', border: '1.5px solid var(--sand)', borderRadius: 8, fontSize: 14, fontFamily: 'DM Sans, sans-serif', background: 'var(--cream)', outline: 'none' }}
+              />
+              <input
+                value={cls.duration}
+                onChange={e => updateClass(i, 'duration', e.target.value)}
+                placeholder="60"
+                type="number"
+                style={{ padding: '10px 8px', border: '1.5px solid var(--sand)', borderRadius: 8, fontSize: 14, fontFamily: 'DM Sans, sans-serif', background: 'var(--cream)', outline: 'none', textAlign: 'center' }}
+              />
+              <input
+                value={cls.price}
+                onChange={e => updateClass(i, 'price', e.target.value)}
+                placeholder="70"
+                type="number"
+                style={{ padding: '10px 8px', border: '1.5px solid var(--sand)', borderRadius: 8, fontSize: 14, fontFamily: 'DM Sans, sans-serif', background: 'var(--cream)', outline: 'none', textAlign: 'center' }}
+              />
+              <button
+                onClick={() => removeClass(i)}
+                disabled={s.regularClasses.length <= 1}
+                style={{ width: 34, height: 34, borderRadius: 8, border: 'none', background: s.regularClasses.length <= 1 ? 'var(--sand)' : 'var(--danger-light)', color: s.regularClasses.length <= 1 ? 'var(--sand-dark)' : 'var(--danger)', cursor: s.regularClasses.length <= 1 ? 'default' : 'pointer', fontSize: 18, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+              >×</button>
+            </div>
+          ))}
+
+          <button className="add-row-btn" onClick={addClass} style={{ marginTop: 4 }}>
+            <span>＋</span> Add regular class
+          </button>
+        </div>
+
+        <hr className="divider" />
+
+        {/* ── Banking Details ── */}
+        <div style={{ marginBottom: 24 }}>
+          <div style={{ fontSize: 13, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.8px', color: 'var(--sage-dark)', marginBottom: 10, display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span>🏦</span> Banking Details
+          </div>
+          <div className="field">
+            <label>Account Name</label>
+            <input placeholder="Grace Crossland-Scott" value={s.bankAccountName} onChange={e => setS({...s, bankAccountName: e.target.value})} />
+          </div>
+          <div className="field-row">
+            <div className="field">
+              <label>BSB</label>
+              <input placeholder="484-799" value={s.bankBSB} onChange={e => setS({...s, bankBSB: e.target.value})} />
+            </div>
+            <div className="field">
+              <label>Account Number</label>
+              <input placeholder="051 713 949" value={s.bankAccountNumber} onChange={e => setS({...s, bankAccountNumber: e.target.value})} />
+            </div>
+          </div>
+        </div>
+
+        <hr className="divider" />
+
+        {/* ── EmailJS ── */}
+        <div>
+          <div style={{ fontSize: 13, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.8px', color: 'var(--sage-dark)', marginBottom: 10, display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span>✉️</span> EmailJS Setup
+          </div>
+          <div className="setup-banner">
+            <strong>One-time setup required</strong> to enable automatic email sending.<br/><br/>
+            1. Go to <strong>emailjs.com</strong> → create free account<br/>
+            2. Add an Email Service (Gmail works great) → copy <strong>Service ID</strong><br/>
+            3. Create a Template → copy <strong>Template ID</strong><br/>
+            4. Account → API Keys → copy <strong>Public Key</strong>
+          </div>
+          <div className="field">
+            <label>Service ID</label>
+            <input placeholder="service_xxxxxxx" value={s.emailjsServiceId} onChange={e => setS({...s, emailjsServiceId: e.target.value})} />
+          </div>
+          <div className="field">
+            <label>Template ID</label>
+            <input placeholder="template_xxxxxxx" value={s.emailjsTemplateId} onChange={e => setS({...s, emailjsTemplateId: e.target.value})} />
+          </div>
+          <div className="field">
+            <label>Public Key</label>
+            <input placeholder="xxxxxxxxxxxxxxxxxxxxxx" value={s.emailjsPublicKey} onChange={e => setS({...s, emailjsPublicKey: e.target.value})} />
+          </div>
+        </div>
+
+        <div className="btn-row">
+          <button className="btn btn-secondary" onClick={onClose}>Cancel</button>
+          <button className="btn btn-primary" onClick={handleSave}>Save Settings</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Invoice List ─────────────────────────────────────────────────────────────
+function InvoiceList({ invoices, setInvoices, onEdit, showToast }) {
+  const [confirmDelete, setConfirmDelete] = useState(null);
+
+  async function handleEmail(invoice) {
+    const settings = loadSettings();
+    if (!settings.emailjsPublicKey || !settings.emailjsServiceId || !settings.emailjsTemplateId) {
+      showToast('⚙️ Set up EmailJS in Settings first');
+      return;
+    }
+
+    showToast('Generating PDF...');
+
+    try {
+      // Load EmailJS dynamically
+      if (!window.emailjs) {
+        await new Promise((res, rej) => {
+          const s = document.createElement('script');
+          s.src = 'https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js';
+          s.onload = res; s.onerror = rej;
+          document.head.appendChild(s);
+        });
+      }
+
+      window.emailjs.init({ publicKey: settings.emailjsPublicKey });
+
+      const doc = generatePDF(invoice);
+      const pdfBase64 = doc.output('datauristring').split(',')[1];
+
+      await window.emailjs.send(settings.emailjsServiceId, settings.emailjsTemplateId, {
+        to_email: 'brisbanegfm@tbhgroup.com.au',
+        invoice_number: invoice.invoiceNumber,
+        invoice_date: invoice.date,
+        total: `$${invoice.total.toFixed(2)}`,
+        pdf_attachment: pdfBase64,
+        filename: `Grace Crossland-Scott ${invoice.invoiceNumber}.pdf`,
+      });
+
+      const updated = invoices.map(i => i.id === invoice.id ? { ...i, status: 'sent' } : i);
+      setInvoices(updated);
+      saveInvoices(updated);
+      showToast('✓ Invoice emailed to Snap Fitness!');
+    } catch (err) {
+      console.error(err);
+      showToast('Email failed — check Settings');
+    }
+  }
+
+  function handleDownload(invoice) {
+    const doc = generatePDF(invoice);
+    doc.save(`Grace Crossland-Scott ${invoice.invoiceNumber}.pdf`);
+    showToast('✓ PDF saved');
+  }
+
+  function handleDuplicate(invoice) {
+    const newInv = {
+      ...invoice,
+      id: Date.now().toString(),
+      invoiceNumber: getNextInvoiceNumber(invoices),
+      date: todayStr(),
+      status: 'draft',
+      createdAt: new Date().toISOString(),
+    };
+    const updated = [...invoices, newInv];
+    setInvoices(updated);
+    saveInvoices(updated);
+    showToast('✓ Invoice duplicated');
+  }
+
+  function handleDelete(id) {
+    const updated = invoices.filter(i => i.id !== id);
+    setInvoices(updated);
+    saveInvoices(updated);
+    setConfirmDelete(null);
+    showToast('Deleted');
+  }
+
+  if (!invoices.length) {
+    return (
+      <div className="empty">
+        <div className="empty-icon">🧾</div>
+        <h3>No invoices yet</h3>
+        <p>Tap "New Invoice" to create your first one. It'll appear here once saved.</p>
+      </div>
+    );
+  }
+
+  const sorted = [...invoices].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+
+  return (
+    <div>
+      {confirmDelete && (
+        <div className="modal-overlay" onClick={() => setConfirmDelete(null)}>
+          <div className="modal" onClick={e => e.stopPropagation()}>
+            <div className="modal-handle" />
+            <div className="modal-title">Delete Invoice?</div>
+            <p style={{ color: 'var(--ink-soft)', marginBottom: 24 }}>
+              This will permanently remove <strong>{confirmDelete.invoiceNumber}</strong>. This can't be undone.
+            </p>
+            <div className="btn-row">
+              <button className="btn btn-secondary" onClick={() => setConfirmDelete(null)}>Cancel</button>
+              <button className="btn btn-danger" onClick={() => handleDelete(confirmDelete.id)}>Delete</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {sorted.map(invoice => (
+        <div className="invoice-item" key={invoice.id} style={{ flexDirection: 'column', alignItems: 'flex-start' }}>
+          <div style={{ display: 'flex', width: '100%', alignItems: 'center' }}>
+            <div className="invoice-item-info">
+              <div className="invoice-item-num">
+                <span className={`status-dot ${invoice.status === 'sent' ? 'sent' : 'draft'}`} />
+                {invoice.invoiceNumber}
+              </div>
+              <div className="invoice-item-meta">{invoice.date} · Snap Fitness</div>
+            </div>
+            <div className="invoice-item-amount">${invoice.total.toFixed(2)}</div>
+          </div>
+          <div className="invoice-actions">
+            <button className="btn btn-secondary btn-sm" onClick={() => onEdit(invoice)}>✏️ Edit</button>
+            <button className="btn btn-secondary btn-sm" onClick={() => handleDownload(invoice)}>⬇️ PDF</button>
+            <button className="btn btn-accent btn-sm" onClick={() => handleEmail(invoice)}>✉️ Email</button>
+            <button className="btn btn-secondary btn-sm" onClick={() => handleDuplicate(invoice)}>⧉ Copy</button>
+            <button className="btn btn-danger btn-sm" onClick={() => setConfirmDelete(invoice)}>🗑</button>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ─── App ──────────────────────────────────────────────────────────────────────
+function App() {
+  const [tab, setTab] = useState('new');
+  const [invoices, setInvoices] = useState(loadInvoices);
+  const [editingInvoice, setEditingInvoice] = useState(null);
+  const [toast, setToast] = useState(null);
+  const [showSettings, setShowSettings] = useState(false);
+  const [settingsVersion, setSettingsVersion] = useState(0);
+  const toastTimer = useRef(null);
+
+  function showToast(msg) {
+    clearTimeout(toastTimer.current);
+    setToast(msg);
+    toastTimer.current = setTimeout(() => setToast(null), 2800);
+  }
+
+  function handleSettingsSaved() {
+    setSettingsVersion(v => v + 1);
+  }
+
+  function handleSave(invoice) {
+    // Clear invoice number override after it's been consumed
+    const settings = loadSettings();
+    if (settings.invoiceNumberOverride) {
+      saveSettings({ ...settings, invoiceNumberOverride: '' });
+    }
+    let updated;
+    if (editingInvoice) {
+      updated = invoices.map(i => i.id === invoice.id ? invoice : i);
+      showToast('✓ Invoice updated');
+    } else {
+      updated = [...invoices, invoice];
+      showToast('✓ Invoice saved');
+    }
+    setInvoices(updated);
+    saveInvoices(updated);
+    setEditingInvoice(null);
+    setTab('list');
+  }
+
+  function handleEdit(invoice) {
+    setEditingInvoice(invoice);
+    setTab('new');
+    window.scrollTo(0, 0);
+  }
+
+  function handleNewInvoice() {
+    setEditingInvoice(null);
+    setTab('new');
+  }
+
+  const settings = loadSettings();
+  const emailConfigured = settings.emailjsPublicKey && settings.emailjsServiceId && settings.emailjsTemplateId;
+
+  return (
+    <div className="app">
+      <div className="header">
+        <div>
+          <div className="header-title">Grace Invoices</div>
+          <div className="header-sub">Snap Fitness · Fortnightly</div>
+        </div>
+        <button className="btn btn-ghost" onClick={() => setShowSettings(true)} style={{ fontSize: 22 }}>⚙️</button>
+      </div>
+
+      <div className="tabs">
+        <button className={`tab ${tab === 'new' ? 'active' : ''}`} onClick={handleNewInvoice}>
+          {editingInvoice ? '✏️ Editing' : '+ New Invoice'}
+        </button>
+        <button className={`tab ${tab === 'list' ? 'active' : ''}`} onClick={() => { setEditingInvoice(null); setTab('list'); }}>
+          All Invoices {invoices.length > 0 && `(${invoices.length})`}
+        </button>
+      </div>
+
+      <div className="content">
+        {!emailConfigured && tab === 'new' && (
+          <div className="setup-banner">
+            <strong>📧 Email not configured yet.</strong> Tap ⚙️ to set up EmailJS — takes 5 minutes and lets you send invoices directly from this app.
+          </div>
+        )}
+
+        {tab === 'new' && (
+          <InvoiceForm
+            key={editingInvoice?.id || `new-${settingsVersion}`}
+            existing={editingInvoice}
+            invoices={invoices}
+            onSave={handleSave}
+            onCancel={editingInvoice ? () => { setEditingInvoice(null); setTab('list'); } : null}
+            showToast={showToast}
+          />
+        )}
+
+        {tab === 'list' && (
+          <InvoiceList
+            invoices={invoices}
+            setInvoices={setInvoices}
+            onEdit={handleEdit}
+            showToast={showToast}
+          />
+        )}
+      </div>
+
+      {showSettings && (
+        <SettingsModal
+          onClose={() => setShowSettings(false)}
+          showToast={showToast}
+          onSettingsSaved={handleSettingsSaved}
+        />
+      )}
+      {toast && <div className="toast">{toast}</div>}
+    </div>
+  );
+}
+
+ReactDOM.render(<App />, document.getElementById('root'));
+</script>
+</body>
+</html>
