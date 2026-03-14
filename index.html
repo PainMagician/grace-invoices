@@ -1524,6 +1524,61 @@ function SettingsModal({ onClose, showToast, onSettingsSaved }) {
           </div>
         </div>
 
+        <hr className="divider" />
+
+        {/* ── Backup & Restore ── */}
+        <div style={{ marginBottom: 8 }}>
+          {sectionHead('💾', 'Backup & Restore')}
+          <div className="info-block" style={{ marginBottom: 14 }}>
+            Export saves all your invoices, businesses and settings to a file. Import restores everything from a previous export — use this after updating the app.
+          </div>
+          <div className="btn-row" style={{ marginTop: 0 }}>
+            <button className="btn btn-secondary btn-full" onClick={() => {
+              try {
+                const data = {
+                  version: 1,
+                  exportedAt: new Date().toISOString(),
+                  invoices: JSON.parse(localStorage.getItem('grace_invoices_v1') || '[]'),
+                  businesses: JSON.parse(localStorage.getItem('grace_invoices_businesses_v1') || '[]'),
+                  settings: JSON.parse(localStorage.getItem('grace_invoices_settings_v1') || '{}'),
+                };
+                const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `grace-invoices-backup-${new Date().toISOString().slice(0,10)}.json`;
+                a.click();
+                URL.revokeObjectURL(url);
+                showToast('✓ Backup saved to Files');
+              } catch(e) { showToast('Export failed'); }
+            }}>⬇️ Export Backup</button>
+
+            <button className="btn btn-secondary btn-full" onClick={() => {
+              const input = document.createElement('input');
+              input.type = 'file';
+              input.accept = '.json';
+              input.onchange = e => {
+                const file = e.target.files[0];
+                if (!file) return;
+                const reader = new FileReader();
+                reader.onload = evt => {
+                  try {
+                    const data = JSON.parse(evt.target.result);
+                    if (!data.version || !data.invoices) { showToast('Invalid backup file'); return; }
+                    if (data.invoices) localStorage.setItem('grace_invoices_v1', JSON.stringify(data.invoices));
+                    if (data.businesses) localStorage.setItem('grace_invoices_businesses_v1', JSON.stringify(data.businesses));
+                    if (data.settings) localStorage.setItem('grace_invoices_settings_v1', JSON.stringify(data.settings));
+                    showToast('✓ Data restored — restart the app');
+                    setTimeout(() => window.location.reload(), 1500);
+                  } catch(err) { showToast('Restore failed — invalid file'); }
+                };
+                reader.readAsText(file);
+              };
+              input.click();
+            }}>⬆️ Import Backup</button>
+          </div>
+        </div>
+
         <div className="btn-row">
           <button className="btn btn-secondary" onClick={onClose}>Cancel</button>
           <button className="btn btn-primary" onClick={handleSave}>Save Settings</button>
