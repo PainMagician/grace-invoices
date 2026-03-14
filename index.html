@@ -1358,30 +1358,29 @@ function SettingsModal({ onClose, showToast, onSettingsSaved }) {
 // ─── Invoice List ─────────────────────────────────────────────────────────────
 function InvoiceList({ invoices, setInvoices, onEdit, showToast }) {
   const [confirmDelete, setConfirmDelete] = useState(null);
+  const [mailPrompt, setMailPrompt] = useState(null); // { invoice, mailtoUrl }
 
-  async function handleEmail(invoice) {
-    showToast('Saving PDF...');
+  function handleEmail(invoice) {
+    // On iOS, mailto must be triggered by a direct user tap — not after async/setTimeout.
+    // So: save PDF synchronously, then show a modal with an "Open Mail" button.
     try {
       const doc = generatePDF(invoice);
       const filename = `Grace Crossland-Scott ${invoice.invoiceNumber}.pdf`;
-
-      // Save PDF to device
       doc.save(filename);
-
-      // Small delay to let the download start, then open Mail
-      await new Promise(r => setTimeout(r, 600));
 
       const subject = encodeURIComponent(`Invoice ${invoice.invoiceNumber} — Grace Crossland-Scott`);
       const body = encodeURIComponent(
         `Hi,\n\nPlease find attached invoice ${invoice.invoiceNumber} dated ${invoice.date} for $${invoice.total.toFixed(2)}.\n\nRegards,\nGrace Crossland-Scott`
       );
-      window.location.href = `mailto:brisbanegfm@tbhgroup.com.au?subject=${subject}&body=${body}`;
+      const mailtoUrl = `mailto:brisbanegfm@tbhgroup.com.au?subject=${subject}&body=${body}`;
 
       // Mark as sent
       const updated = invoices.map(i => i.id === invoice.id ? { ...i, status: 'sent' } : i);
       setInvoices(updated);
       saveInvoices(updated);
-      showToast('✓ PDF saved — attach it in Mail');
+
+      // Show prompt — user must tap the button directly to trigger mailto on iOS
+      setMailPrompt({ invoice, mailtoUrl });
     } catch (err) {
       console.error(err);
       showToast('Something went wrong');
@@ -1431,6 +1430,28 @@ function InvoiceList({ invoices, setInvoices, onEdit, showToast }) {
 
   return (
     <div>
+      {/* Mail prompt modal — shown after PDF saves, user taps to open Mail (iOS requires direct tap) */}
+      {mailPrompt && (
+        <div className="modal-overlay" onClick={() => setMailPrompt(null)}>
+          <div className="modal" onClick={e => e.stopPropagation()}>
+            <div className="modal-handle" />
+            <div className="modal-title">✓ PDF Saved!</div>
+            <p style={{ color: 'var(--ink-soft)', marginBottom: 8, lineHeight: 1.6 }}>
+              <strong>Grace Crossland-Scott {mailPrompt.invoice.invoiceNumber}.pdf</strong> has been saved to your Files.
+            </p>
+            <p style={{ color: 'var(--ink-soft)', marginBottom: 24, lineHeight: 1.6 }}>
+              Tap below to open Mail — it will be pre-addressed to Snap Fitness. Then attach the PDF and send.
+            </p>
+            <div className="btn-row">
+              <button className="btn btn-secondary" onClick={() => setMailPrompt(null)}>Close</button>
+              <button className="btn btn-accent" onClick={() => { window.location.href = mailPrompt.mailtoUrl; setMailPrompt(null); }}>
+                ✉️ Open Mail
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {confirmDelete && (
         <div className="modal-overlay" onClick={() => setConfirmDelete(null)}>
           <div className="modal" onClick={e => e.stopPropagation()}>
