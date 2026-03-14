@@ -587,9 +587,6 @@ function loadSettings() {
   try {
     const stored = JSON.parse(localStorage.getItem(SETTINGS_KEY) || 'null');
     const defaults = {
-      emailjsServiceId: '',
-      emailjsTemplateId: '',
-      emailjsPublicKey: '',
       invoiceNumberOverride: '',
       bankAccountName: 'Grace Crossland-Scott',
       bankBSB: '484-799',
@@ -601,7 +598,6 @@ function loadSettings() {
     return stored ? { ...defaults, ...stored } : defaults;
   } catch {
     return {
-      emailjsServiceId: '', emailjsTemplateId: '', emailjsPublicKey: '',
       invoiceNumberOverride: '',
       bankAccountName: 'Grace Crossland-Scott',
       bankBSB: '484-799',
@@ -1337,29 +1333,16 @@ function SettingsModal({ onClose, showToast, onSettingsSaved }) {
 
         <hr className="divider" />
 
-        {/* ── EmailJS ── */}
+        {/* ── Email ── */}
         <div>
           <div style={{ fontSize: 13, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.8px', color: 'var(--sage-dark)', marginBottom: 10, display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span>✉️</span> EmailJS Setup
+            <span>✉️</span> Sending Invoices
           </div>
-          <div className="setup-banner">
-            <strong>One-time setup required</strong> to enable automatic email sending.<br/><br/>
-            1. Go to <strong>emailjs.com</strong> → create free account<br/>
-            2. Add an Email Service (Gmail works great) → copy <strong>Service ID</strong><br/>
-            3. Create a Template → copy <strong>Template ID</strong><br/>
-            4. Account → API Keys → copy <strong>Public Key</strong>
-          </div>
-          <div className="field">
-            <label>Service ID</label>
-            <input placeholder="service_xxxxxxx" value={s.emailjsServiceId} onChange={e => setS({...s, emailjsServiceId: e.target.value})} />
-          </div>
-          <div className="field">
-            <label>Template ID</label>
-            <input placeholder="template_xxxxxxx" value={s.emailjsTemplateId} onChange={e => setS({...s, emailjsTemplateId: e.target.value})} />
-          </div>
-          <div className="field">
-            <label>Public Key</label>
-            <input placeholder="xxxxxxxxxxxxxxxxxxxxxx" value={s.emailjsPublicKey} onChange={e => setS({...s, emailjsPublicKey: e.target.value})} />
+          <div className="info-block">
+            Tapping <strong>✉️ Email</strong> on any invoice will:<br/><br/>
+            1. Save the PDF to your iPad Files<br/>
+            2. Open Mail pre-addressed to Snap Fitness<br/>
+            3. Tap the paperclip → attach the PDF → Send
           </div>
         </div>
 
@@ -1377,46 +1360,31 @@ function InvoiceList({ invoices, setInvoices, onEdit, showToast }) {
   const [confirmDelete, setConfirmDelete] = useState(null);
 
   async function handleEmail(invoice) {
-    const settings = loadSettings();
-    if (!settings.emailjsPublicKey || !settings.emailjsServiceId || !settings.emailjsTemplateId) {
-      showToast('⚙️ Set up EmailJS in Settings first');
-      return;
-    }
-
-    showToast('Generating PDF...');
-
+    showToast('Saving PDF...');
     try {
-      // Load EmailJS dynamically
-      if (!window.emailjs) {
-        await new Promise((res, rej) => {
-          const s = document.createElement('script');
-          s.src = 'https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js';
-          s.onload = res; s.onerror = rej;
-          document.head.appendChild(s);
-        });
-      }
-
-      window.emailjs.init({ publicKey: settings.emailjsPublicKey });
-
       const doc = generatePDF(invoice);
-      const pdfBase64 = doc.output('datauristring').split(',')[1];
+      const filename = `Grace Crossland-Scott ${invoice.invoiceNumber}.pdf`;
 
-      await window.emailjs.send(settings.emailjsServiceId, settings.emailjsTemplateId, {
-        to_email: 'brisbanegfm@tbhgroup.com.au',
-        invoice_number: invoice.invoiceNumber,
-        invoice_date: invoice.date,
-        total: `$${invoice.total.toFixed(2)}`,
-        pdf_attachment: pdfBase64,
-        filename: `Grace Crossland-Scott ${invoice.invoiceNumber}.pdf`,
-      });
+      // Save PDF to device
+      doc.save(filename);
 
+      // Small delay to let the download start, then open Mail
+      await new Promise(r => setTimeout(r, 600));
+
+      const subject = encodeURIComponent(`Invoice ${invoice.invoiceNumber} — Grace Crossland-Scott`);
+      const body = encodeURIComponent(
+        `Hi,\n\nPlease find attached invoice ${invoice.invoiceNumber} dated ${invoice.date} for $${invoice.total.toFixed(2)}.\n\nRegards,\nGrace Crossland-Scott`
+      );
+      window.location.href = `mailto:brisbanegfm@tbhgroup.com.au?subject=${subject}&body=${body}`;
+
+      // Mark as sent
       const updated = invoices.map(i => i.id === invoice.id ? { ...i, status: 'sent' } : i);
       setInvoices(updated);
       saveInvoices(updated);
-      showToast('✓ Invoice emailed to Snap Fitness!');
+      showToast('✓ PDF saved — attach it in Mail');
     } catch (err) {
       console.error(err);
-      showToast('Email failed — check Settings');
+      showToast('Something went wrong');
     }
   }
 
@@ -1556,7 +1524,6 @@ function App() {
   }
 
   const settings = loadSettings();
-  const emailConfigured = settings.emailjsPublicKey && settings.emailjsServiceId && settings.emailjsTemplateId;
 
   return (
     <div className="app">
@@ -1578,12 +1545,6 @@ function App() {
       </div>
 
       <div className="content">
-        {!emailConfigured && tab === 'new' && (
-          <div className="setup-banner">
-            <strong>📧 Email not configured yet.</strong> Tap ⚙️ to set up EmailJS — takes 5 minutes and lets you send invoices directly from this app.
-          </div>
-        )}
-
         {tab === 'new' && (
           <InvoiceForm
             key={editingInvoice?.id || `new-${settingsVersion}`}
